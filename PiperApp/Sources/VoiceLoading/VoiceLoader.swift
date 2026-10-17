@@ -326,7 +326,11 @@ class VoiceLoader: NSObject {
     /// session-scoped download machinery as the voice files, so it
     /// reports progress into the dictionary band and is cancelled
     /// together with the voice download, then installs it into the
-    /// shared folder. Failures are logged, not fatal (mirrors the G2PW
+    /// shared folder. The manifest published next to the archive is
+    /// fetched first, and the archive is installed only after its size
+    /// and SHA-256 match the manifest, so a manifest that cannot be
+    /// fetched or decoded aborts the step - nothing unverified is ever
+    /// installed. Failures are logged, not fatal (mirrors the G2PW
     /// handling): the voice still installs, and the next Japanese
     /// download retries the dictionary. A cancellation needs no special
     /// handling here - the model download that follows re-checks the
@@ -334,6 +338,7 @@ class VoiceLoader: NSObject {
     private func ensureJapaneseDictionary(session: UUID,
                                           continuation: AsyncThrowingStream<DownloadEvent, Swift.Error>.Continuation) async {
         do {
+            let manifest = try await fetchOpenJTalkManifest()
             let archiveURL = try await downloadFile(
                 from: OpenJTalkDataManager.dictionaryArchiveURL,
                 session: session,
@@ -342,11 +347,25 @@ class VoiceLoader: NSObject {
                 continuation: continuation
             )
             defer { try? FileManager.default.removeItem(at: archiveURL) }
-            try OpenJTalkDataManager.verifyCanonicalArchive(at: archiveURL)
+            guard fileSize(at: archiveURL) == manifest.sizeBytes else {
+                throw Error.loadingFailed
+            }
+            try OpenJTalkDataManager.verifyArchive(at: archiveURL,
+                                                   expectedSHA256: manifest.sha256)
             try OpenJTalkDataManager.install(fromArchiveFile: archiveURL)
         } catch {
             Log.error("Failed to install OpenJTalk dictionary: \(error)")
         }
+    }
+
+    /// Fetches the dictionary manifest (`openjtalk.json`) published
+    /// next to the archive in its Hugging Face repo, the same way the
+    /// voice catalog is fetched in `loadVoices`. The manifest carries
+    /// the expected archive size and hash, so dictionary updates never
+    /// need an app update.
+    private func fetchOpenJTalkManifest() async throws -> OpenJTalkManifest {
+        let (data, _) = try await URLSession.shared.data(from: OpenJTalkDataManager.dictionaryManifestURL)
+        return try JSONDecoder().decode(OpenJTalkManifest.self, from: data)
     }
 
     private func downloadFile(

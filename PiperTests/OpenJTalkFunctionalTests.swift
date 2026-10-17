@@ -54,11 +54,12 @@ final class OpenJTalkFunctionalTests: XCTestCase {
     }
 
     /// Downloads the LIVE canonical archive from the Hugging Face repo,
-    /// verifies its pinned SHA-256, and installs it into the shared
-    /// folder - the same pieces the VoiceLoader production path runs
-    /// (its session download + hash verification + install), exercised
-    /// here against the real network source. Gated on
-    /// OPENJTALK_FUNCTIONAL_LIVE=1 and a not-installed starting state.
+    /// verifies it against the manifest published next to it, and
+    /// installs it into the shared folder - the same pieces the
+    /// VoiceLoader production path runs (manifest fetch + session
+    /// download + hash verification + install), exercised here against
+    /// the real network source. Gated on OPENJTALK_FUNCTIONAL_LIVE=1
+    /// and a not-installed starting state.
     func testLiveArchiveDownloadsAndInstalls() async throws {
         guard ProcessInfo.processInfo.environment["OPENJTALK_FUNCTIONAL_LIVE"] == "1" else {
             throw XCTSkip("OPENJTALK_FUNCTIONAL_LIVE not set")
@@ -68,6 +69,15 @@ final class OpenJTalkFunctionalTests: XCTestCase {
         XCTAssertFalse(FileManager.Constants.openjtalkFileExists(),
                        "precondition: shared dictionary must start uninstalled")
 
+        // Like production, the manifest is fetched first: it is the
+        // source of the expected archive size and hash.
+        let (manifestData, manifestResponse) = try await URLSession.shared.data(
+            from: OpenJTalkDataManager.dictionaryManifestURL)
+        XCTAssertEqual((manifestResponse as? HTTPURLResponse)?.statusCode, 200)
+        let manifest = try JSONDecoder().decode(OpenJTalkManifest.self, from: manifestData)
+        XCTAssertEqual(manifest.archive,
+                       OpenJTalkDataManager.dictionaryArchiveURL.lastPathComponent)
+
         let (downloaded, response) = try await URLSession.shared.download(
             from: OpenJTalkDataManager.dictionaryArchiveURL)
         defer { try? FileManager.default.removeItem(at: downloaded) }
@@ -75,10 +85,10 @@ final class OpenJTalkFunctionalTests: XCTestCase {
         XCTAssertEqual(http.statusCode, 200)
 
         let size = (try FileManager.default.attributesOfItem(atPath: downloaded.path)[.size] as? NSNumber)?.int64Value
-        XCTAssertEqual(size, 23_595_090)
-        XCTAssertEqual(try OpenJTalkDataManager.sha256Hex(of: downloaded),
-                       OpenJTalkDataManager.dictionaryArchiveSHA256)
-        XCTAssertNoThrow(try OpenJTalkDataManager.verifyCanonicalArchive(at: downloaded))
+        XCTAssertEqual(size, Int64(manifest.sizeBytes))
+        XCTAssertEqual(try OpenJTalkDataManager.sha256Hex(of: downloaded), manifest.sha256)
+        XCTAssertNoThrow(try OpenJTalkDataManager.verifyArchive(at: downloaded,
+                                                               expectedSHA256: manifest.sha256))
 
         try OpenJTalkDataManager.install(fromArchiveFile: downloaded)
 

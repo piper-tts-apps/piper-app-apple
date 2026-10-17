@@ -30,11 +30,13 @@ public enum OpenJTalkDataManager {
     /// dictionary files at the zip root (sys.dic, matrix.bin, ...).
     public static let dictionaryArchiveURL = URL(string: "https://huggingface.co/IhorShevchuk/openjtalk-dictionary/resolve/main/openjtalk.zip")!
 
-    /// SHA-256 of the canonical `openjtalk.zip` in that repo (23,595,090
-    /// bytes, uploaded 2026-10-10). Archives fetched from the canonical
-    /// URL are verified against this before anything is installed, so a
-    /// corrupted or swapped upload cannot reach the shared folder.
-    public static let dictionaryArchiveSHA256 = "06039fe6f628cb7d946284d81aaca911380f90d880f81c768f0c7d06be557322"
+    /// Manifest published next to the archive in the same repo
+    /// (`openjtalk.json`): the archive's SHA-256, byte size, and a
+    /// dictionary version number. `VoiceLoader` fetches it at download
+    /// time and passes the hash to `verifyArchive(at:expectedSHA256:)`,
+    /// so the dictionary can be revised without an app update - no
+    /// expected hash is pinned in the binary.
+    public static let dictionaryManifestURL = URL(string: "https://huggingface.co/IhorShevchuk/openjtalk-dictionary/resolve/main/openjtalk.json")!
 
     public static var folderURL: URL? {
         FileManager.Constants.openjtalkFolderURL
@@ -52,9 +54,10 @@ public enum OpenJTalkDataManager {
         }
     }
 
-    /// Verifies a downloaded archive against the pinned canonical hash.
-    public static func verifyCanonicalArchive(at file: URL) throws {
-        guard try sha256Hex(of: file) == dictionaryArchiveSHA256 else {
+    /// Verifies a downloaded archive against the SHA-256 published in
+    /// the dictionary manifest (see `dictionaryManifestURL`).
+    public static func verifyArchive(at file: URL, expectedSHA256: String) throws {
+        guard try sha256Hex(of: file) == expectedSHA256 else {
             throw Error.archiveHashMismatch
         }
     }

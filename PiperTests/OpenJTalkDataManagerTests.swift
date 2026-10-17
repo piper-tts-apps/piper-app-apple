@@ -131,15 +131,45 @@ final class OpenJTalkDataManagerTests: XCTestCase {
                        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
-    func testVerifyCanonicalArchiveRejectsNonCanonicalFile() async throws {
+    func testVerifyArchiveAcceptsMatchingHash() throws {
         let archive = try makeFixtureArchive()
-        XCTAssertThrowsError(try OpenJTalkDataManager.verifyCanonicalArchive(at: archive)) { error in
+        let hash = try OpenJTalkDataManager.sha256Hex(of: archive)
+        XCTAssertNoThrow(try OpenJTalkDataManager.verifyArchive(at: archive,
+                                                                expectedSHA256: hash))
+    }
+
+    func testVerifyArchiveRejectsMismatchedHash() throws {
+        let archive = try makeFixtureArchive()
+        let wrongHash = String(repeating: "0", count: 64)
+        XCTAssertThrowsError(try OpenJTalkDataManager.verifyArchive(at: archive,
+                                                                    expectedSHA256: wrongHash)) { error in
             guard let managerError = error as? OpenJTalkDataManager.Error,
                   case .archiveHashMismatch = managerError else {
                 XCTFail("expected archiveHashMismatch, got \(error)")
                 return
             }
         }
+    }
+
+    /// The manifest is the client's only source for the expected
+    /// archive size and hash, so its wire shape is pinned by this
+    /// test: the field names and the snake_case `size_bytes` key must
+    /// keep decoding.
+    func testManifestDecoding() throws {
+        let json = """
+        {
+          "archive": "openjtalk.zip",
+          "sha256": "06039fe6f628cb7d946284d81aaca911380f90d880f81c768f0c7d06be557322",
+          "size_bytes": 23595090,
+          "version": 1
+        }
+        """
+        let manifest = try JSONDecoder().decode(OpenJTalkManifest.self, from: Data(json.utf8))
+        XCTAssertEqual(manifest.archive, "openjtalk.zip")
+        XCTAssertEqual(manifest.sha256,
+                       "06039fe6f628cb7d946284d81aaca911380f90d880f81c768f0c7d06be557322")
+        XCTAssertEqual(manifest.sizeBytes, 23_595_090)
+        XCTAssertEqual(manifest.version, 1)
     }
 
     private func assertNoLeftovers() {
