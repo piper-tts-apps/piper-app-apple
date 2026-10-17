@@ -183,9 +183,16 @@ final class OpenJTalkDataManagerTests: XCTestCase {
 /// Shared-folder constants for the OpenJTalk dictionary (PiperAppUtils).
 final class OpenJTalkConstantsTests: XCTestCase {
 
-    func testFolderIdentity() {
+    func testFolderIdentity() throws {
         XCTAssertEqual(FileManager.Constants.openjtalkFolderName, "openjtalk")
-        XCTAssertEqual(FileManager.Constants.openjtalkFolderURL?.lastPathComponent,
+        // The folder URL is built from the app-group container, which
+        // is unavailable to this process in some environments (the iOS
+        // Simulator on CI resolves it to nil), so the URL identity
+        // check only applies where a URL exists.
+        guard let folderURL = FileManager.Constants.openjtalkFolderURL else {
+            throw XCTSkip("app-group container unavailable in this process")
+        }
+        XCTAssertEqual(folderURL.lastPathComponent,
                        FileManager.Constants.openjtalkFolderName)
     }
 
