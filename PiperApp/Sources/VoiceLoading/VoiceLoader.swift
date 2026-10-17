@@ -210,6 +210,13 @@ class VoiceLoader: NSObject {
         return config.phonemeType?.lowercased() == "pinyin"
     }
 
+    private func isJapaneseVoice(_ voice: Voice, configURL: URL) -> Bool {
+        if voice.language.code.lowercased().hasPrefix("ja") { return true }
+        guard let data = try? Data(contentsOf: configURL) else { return false }
+        guard let config = try? JSONDecoder().decode(VoiceConfig.self, from: data) else { return false }
+        return config.phonemeType?.lowercased() == "japanese"
+    }
+
     func download(voice: Voice,
                   session: UUID) -> AsyncThrowingStream<DownloadEvent, Swift.Error> {
         AsyncThrowingStream { continuation in
@@ -234,12 +241,26 @@ class VoiceLoader: NSObject {
             let jsonLocalURL = try await downloadVoiceConfig(voice: voice, session: session, continuation: continuation)
             downloadedFiles.append(jsonLocalURL)
 
-            // Model is large → weight 95%
+            // Japanese voices also need the OpenJTalk dictionary, which is
+            // too big to embed in the app. When it is not installed yet, it
+            // is fetched as part of this download (progress band 5% -> 35%)
+            // and the model keeps the remaining 65%; in every other case
+            // the model keeps the usual 95% weight.
+            var modelWeight = 0.95
+            var modelBaseProgress = 0.05
+            if isJapaneseVoice(voice, configURL: jsonLocalURL),
+               !OpenJTalkDataManager.isInstalled {
+                await ensureJapaneseDictionary(session: session, continuation: continuation)
+                modelWeight = 0.65
+                modelBaseProgress = 0.35
+            }
+
+            // Model is large → weight 95% (65% after a dictionary fetch)
             let modelLocalURL = try await self.downloadFile(
                 from: modelURL,
                 session: session,
-                weight: 0.95,
-                baseProgress: 0.05,
+                weight: modelWeight,
+                baseProgress: modelBaseProgress,
                 continuation: continuation
             )
             downloadedFiles.append(modelLocalURL)
@@ -299,6 +320,52 @@ class VoiceLoader: NSObject {
         }
 
         return jsonLocalURL
+    }
+
+    /// Downloads the OpenJTalk dictionary archive through the same
+    /// session-scoped download machinery as the voice files, so it
+    /// reports progress into the dictionary band and is cancelled
+    /// together with the voice download, then installs it into the
+    /// shared folder. The manifest published next to the archive is
+    /// fetched first, and the archive is installed only after its size
+    /// and SHA-256 match the manifest, so a manifest that cannot be
+    /// fetched or decoded aborts the step - nothing unverified is ever
+    /// installed. Failures are logged, not fatal (mirrors the G2PW
+    /// handling): the voice still installs, and the next Japanese
+    /// download retries the dictionary. A cancellation needs no special
+    /// handling here - the model download that follows re-checks the
+    /// cancelled session and throws.
+    private func ensureJapaneseDictionary(session: UUID,
+                                          continuation: AsyncThrowingStream<DownloadEvent, Swift.Error>.Continuation) async {
+        do {
+            let manifest = try await fetchOpenJTalkManifest()
+            let archiveURL = try await downloadFile(
+                from: OpenJTalkDataManager.dictionaryArchiveURL,
+                session: session,
+                weight: 0.30,
+                baseProgress: 0.05,
+                continuation: continuation
+            )
+            defer { try? FileManager.default.removeItem(at: archiveURL) }
+            guard fileSize(at: archiveURL) == manifest.sizeBytes else {
+                throw Error.loadingFailed
+            }
+            try OpenJTalkDataManager.verifyArchive(at: archiveURL,
+                                                   expectedSHA256: manifest.sha256)
+            try OpenJTalkDataManager.install(fromArchiveFile: archiveURL)
+        } catch {
+            Log.error("Failed to install OpenJTalk dictionary: \(error)")
+        }
+    }
+
+    /// Fetches the dictionary manifest (`openjtalk.json`) published
+    /// next to the archive in its Hugging Face repo, the same way the
+    /// voice catalog is fetched in `loadVoices`. The manifest carries
+    /// the expected archive size and hash, so dictionary updates never
+    /// need an app update.
+    private func fetchOpenJTalkManifest() async throws -> OpenJTalkManifest {
+        let (data, _) = try await URLSession.shared.data(from: OpenJTalkDataManager.dictionaryManifestURL)
+        return try JSONDecoder().decode(OpenJTalkManifest.self, from: data)
     }
 
     private func downloadFile(

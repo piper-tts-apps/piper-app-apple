@@ -88,7 +88,8 @@ let project = Project(
             ],
             dependencies: [
                 .target(name: sharedUtilsName, status: .required),
-                .target(name: ttsExtensionName, status: .required)
+                .target(name: ttsExtensionName, status: .required),
+                .external(name: "ZIPFoundation")
             ],
             settings: .settings(configurations:
                                     [
@@ -166,7 +167,8 @@ let project = Project(
             dependencies: [
                 .target(name: projectName),
                 .target(name: sharedUtilsName),
-                .target(name: ttsLogicName)
+                .target(name: ttsLogicName),
+                .external(name: "ZIPFoundation")
             ],
             settings: .settings(base: [
                 "PRODUCT_BUNDLE_IDENTIFIER": "dev.ihor-shevchuk.piper.tests",

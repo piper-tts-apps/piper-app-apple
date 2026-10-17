@@ -47,5 +47,26 @@ extension FileManager {
             let fileManager = FileManager.default
             return g2pwRequiredFiles.allSatisfy { fileManager.fileExists(atPath: folder.appendingPathComponent($0).path) }
         }
+
+        public static var openjtalkFolderName: String { "openjtalk" }
+
+        public static var openjtalkFolderURL: URL? {
+            return sharedFolder?.appendingPathComponent(openjtalkFolderName)
+        }
+
+        public static var openjtalkRequiredFiles: [String] {
+            [
+                "sys.dic",
+                "matrix.bin",
+                "char.bin",
+                "unk.dic"
+            ]
+        }
+
+        public static func openjtalkFileExists() -> Bool {
+            guard let folder = openjtalkFolderURL else { return false }
+            let fileManager = FileManager.default
+            return openjtalkRequiredFiles.allSatisfy { fileManager.fileExists(atPath: folder.appendingPathComponent($0).path) }
+        }
     }
 }
