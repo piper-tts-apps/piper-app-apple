@@ -80,14 +80,7 @@ class MainHostModel: @unchecked Sendable, ObservableObject {
                 self.languages = Dictionary(grouping: voices) { voice in
                     Self.canonicalLanguageCode(voice.language.code)
                 }
-                // Japanese voices are not supported by the app yet, so
-                // they stay out of the languages list and search; the
-                // catalog entry is kept so an installed Japanese voice
-                // still resolves to its language.
                 let codes = self.languages.keys
-                    .filter { code in
-                        return !code.hasPrefix("ja_")
-                    }
                     .sorted(by: { lang1, lang2 in
                         return lang1.localizedLanguageFromCode < lang2.localizedLanguageFromCode
                     })
@@ -148,8 +141,7 @@ class MainHostModel: @unchecked Sendable, ObservableObject {
         }
         return languages.values.flatMap { $0 }
             .filter { voice in
-                // Japanese voices are not supported by the app yet.
-                return voice.isSupported && voice.language.family != "ja"
+                return voice.isSupported
             }
             .filter { voice in
                 if voice.name.folding(options: options, locale: .current).contains(foldedQuery) {

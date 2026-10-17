@@ -237,17 +237,31 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
             }
         }
 
-        if let g2pwDir = g2pwDir {
+        var openjtalkDir: String?
+        if model.language.code.lowercased().hasPrefix("ja") {
+            if let sharedOpenJTalk = FileManager.Constants.openjtalkFolderURL,
+               FileManager.Constants.openjtalkFileExists() {
+                openjtalkDir = sharedOpenJTalk.path(percentEncoded: false)
+            } else {
+                let candidate = modelFolder.appendingPathComponent("openjtalk")
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    openjtalkDir = candidate.path(percentEncoded: false)
+                }
+            }
+        }
+
+        if g2pwDir != nil || openjtalkDir != nil {
             let options = PiperCreateOptions(
                 modelPath: paths.model.path(percentEncoded: false),
                 configPath: paths.json.path(percentEncoded: false),
                 espeakDataPath: nil,
                 dataDir: dataDir,
-                g2pwModelDir: g2pwDir
+                g2pwModelDir: g2pwDir,
+                openjtalkDictDir: openjtalkDir
             )
             piper = (try? Piper(options: options)) ?? (try? Piper(modelPath: paths.model.path(percentEncoded: false),
                                                                      andConfigPath: paths.json.path(percentEncoded: false)))
-            Log.debug("Piper Created with g2pwDir:\(g2pwDir) for zh voice")
+            Log.debug("Piper Created with g2pwDir:\(g2pwDir ?? "nil") openjtalkDir:\(openjtalkDir ?? "nil")")
         } else {
             piper = try? Piper(modelPath: paths.model.path(percentEncoded: false),
                                andConfigPath: paths.json.path(percentEncoded: false))
