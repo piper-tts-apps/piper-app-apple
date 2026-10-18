@@ -3,6 +3,13 @@ import Foundation
 class Fastfile: LaneFile {
 
     private func supportedLanguages() -> [String] {
+        if let rawLanguages = ProcessInfo.processInfo.environment["LANGUAGES"] {
+            let tokens = rawLanguages.components(separatedBy: .whitespaces)
+                .filter { !$0.isEmpty }
+            if !tokens.isEmpty {
+                return tokens
+            }
+        }
         let fileManager = FileManager.default
         let metaPath = "fastlane/metadata"
         if let items = try? fileManager.contentsOfDirectory(atPath: metaPath) {
@@ -16,7 +23,7 @@ class Fastfile: LaneFile {
     }
 
     func captureScreenshotsLane() {
-        desc("Generate iOS screenshots using UI Tests – languages from fastlane/metadata (build once, test-without-building per lang)")
+        desc("Generate iOS screenshots using UI Tests – languages from LANGUAGES env filter, default fastlane/metadata (build once, test-without-building per lang)")
         sh(command: "rm -rf fastlane/test_output && mkdir -p fastlane/test_output")
         // Fix AX timeout on first language – snapshot warns 0s wait, we want 30s for AX to load
         setenv("SNAPSHOT_SIMULATOR_WAIT_FOR_BOOT_TIMEOUT", "30", 1)
