@@ -46,7 +46,7 @@ jobs:
           submodules: false
 
       - name: Setup Mise
-        uses: jdx/mise-action@v5.1.1
+        uses: jdx/mise-action@v5.2.0
 
       - name: Set Build Number
         run: |
