@@ -9,14 +9,23 @@ final class ScreenshotTests: XCTestCase {
 
         setupSnapshot(app)
         app.launch()
+#if os(macOS)
+        // On macOS, launch() alone can leave the app in the background with
+        // no key window, and the test then finds no window to interact with
+        // until somebody activates the app by hand (e.g. clicking its Dock
+        // icon). Activate it the way that Dock click does, then wait until
+        // a window actually exists before taking or tapping anything.
+        app.activate()
+        _ = app.windows.firstMatch.waitForExistence(timeout: 10)
+#endif
     }
 
     func testScreenshots() {
         snapshot("01_Main")
-        app.buttons["gearshape"].activate()
+        app.buttons["gearshape"].tapOrClick()
         snapshot("02_Settings")
         goBack()
-        app.buttons["questionmark.circle"].activate()
+        app.buttons["questionmark.circle"].tapOrClick()
         snapshot("03_Help")
         goBack()
         scrollDown()
@@ -30,7 +39,7 @@ final class ScreenshotTests: XCTestCase {
 #elseif os(macOS)
         let backButtonId = "chevron.backward"
 #endif
-        app.buttons[backButtonId].activate()
+        app.buttons[backButtonId].tapOrClick()
     }
     
     private func scrollDown() {
@@ -43,7 +52,9 @@ final class ScreenshotTests: XCTestCase {
 }
 
 extension XCUIElement {
-    fileprivate func activate() {
+    // Named tapOrClick rather than activate so it cannot collide with
+    // XCUIApplication.activate(), which setUp uses on macOS.
+    fileprivate func tapOrClick() {
 #if os(iOS)
     tap()
 #elseif os(macOS)
