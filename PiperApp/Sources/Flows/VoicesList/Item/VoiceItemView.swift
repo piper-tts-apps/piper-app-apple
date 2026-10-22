@@ -177,7 +177,14 @@ struct VoiceItemView: View {
         } ?? ""
         let showsUpdate = hostModel.viewModel.updateAvailable && hostModel.isInstalled(voice)
         let updateSuffix = showsUpdate ? ", \("update_available".localized)" : ""
-        let accessibilityLabel = baseAccessibilityLabel + licenseSuffix + updateSuffix
+        let isDownloading = hostModel.viewModel.isDownloading
+        let downloadingSuffix = isDownloading ? ", \("downloading".localized)" : ""
+        let accessibilityLabel = baseAccessibilityLabel + licenseSuffix + updateSuffix + downloadingSuffix
+        let accessibilityValue = isDownloading ? "\(Int(hostModel.viewModel.downloadProgress * 100))%" : ""
+        // "Double tap for details" only fits an installed voice: its
+        // row is a navigation link. A catalog row has no detail screen
+        // to open, so it gets no hint.
+        let accessibilityHint: LocalizedStringKey = hostModel.isInstalled(voice) ? "voice_item_hint" : ""
         HStack {
             Spacer()
                 .frame(width: 10)
@@ -214,17 +221,17 @@ struct VoiceItemView: View {
                     }
                 }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint("voice_item_hint")
-            .accessibilityActions {
-                voiceActions()
-            }
             Spacer()
             playDemo()
             download()
         }
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityHint(accessibilityHint)
+        .accessibilityActions {
+            voiceActions()
+        }
         .contextMenu {
             voiceActions()
         }
