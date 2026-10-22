@@ -1,1 +1,3 @@
-- Ogólne poprawki błędów i ulepszenia wydajności.
+- Zaktualizowany interfejs: jedna lista głosów z wyszukiwaniem, Twoje zainstalowane języki na górze
+- Dodano obsługę języka japońskiego
+- Poprawki błędów i drobne ulepszenia

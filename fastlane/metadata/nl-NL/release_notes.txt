@@ -1,1 +1,3 @@
-- Algemene foutoplossingen en prestatieverbeteringen.
+- Vernieuwde interface: één stemmenlijst met zoeken, uw geïnstalleerde talen eerst
+- Ondersteuning voor het Japans toegevoegd
+- Bugfixes en kleine verbeteringen
