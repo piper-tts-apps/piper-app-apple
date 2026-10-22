@@ -94,6 +94,37 @@ prepare_desktop() {
 }
 # --- End clean-desktop prep ---------------------------------------------------
 
+# --- Upload-ready post-processing ---------------------------------------------
+# XCUIScreen captures the whole desktop, so the raw PNGs come out at display
+# size (e.g. 1920x1080), which App Store Connect rejects for Mac screenshots
+# (valid sizes: 1280x800, 1440x900, 2560x1600, 2880x1800). Scale each capture
+# to height 800 keeping its aspect ratio, then centre-crop to exactly
+# 1280x800, in place - so the files this script leaves in the output folder
+# are upload-ready as-is and no separate resize step is needed.
+process_screenshots() {
+  local dir="$1"
+  local f tmp w h nw
+  for f in "$dir"/*.png; do
+    [ -e "$f" ] || continue
+    w=$(sips -g pixelWidth "$f" | awk '/pixelWidth/ {print $2}')
+    h=$(sips -g pixelHeight "$f" | awk '/pixelHeight/ {print $2}')
+    nw=$(awk -v w="$w" -v h="$h" 'BEGIN { printf "%d", (w * 800 / h) + 0.5 }')
+    tmp="$f.processing.png"
+    sips -z 800 "$nw" "$f" --out "$tmp" >/dev/null
+    mv "$tmp" "$f"
+    sips -c 800 1280 "$f" --out "$tmp" >/dev/null
+    mv "$tmp" "$f"
+    w=$(sips -g pixelWidth "$f" | awk '/pixelWidth/ {print $2}')
+    h=$(sips -g pixelHeight "$f" | awk '/pixelHeight/ {print $2}')
+    echo "    $(basename "$f") → ${w}x${h}"
+    if [ "$w" != "1280" ] || [ "$h" != "800" ]; then
+      echo "    ERROR: expected 1280x800 after processing, got ${w}x${h} for $f" >&2
+      exit 1
+    fi
+  done
+}
+# --- End upload-ready post-processing -----------------------------------------
+
 # Smart arch detection – M4 (arm64) vs old Intel mini (x86_64) vs Rosetta
 HOST_ARCH=$(uname -m)
 if [[ "$HOST_ARCH" == "arm64" ]]; then
@@ -153,6 +184,7 @@ for LANG in $LANGUAGES; do
       count=$((count+1))
     done
     echo "  → $count files → $OUTPUT_BASE/$LANG"
+    process_screenshots "$OUTPUT_BASE/$LANG"
   fi
 done
 
