@@ -13,6 +13,87 @@ CACHE_SCREENSHOTS="$CACHE_BASE/screenshots"
 OUTPUT_BASE="fastlane/screenshots/macos"
 DERIVED_DATA="/tmp/snapshot_derived_macos"
 
+# --- Clean-desktop prep -------------------------------------------------------
+# Screenshot runs capture the whole desktop, so hide everything personal for
+# the duration of the run: desktop icons, desktop widgets and the Dock, plus
+# other apps' windows. The original value of every setting is recorded first
+# and restored on exit (success, failure or Ctrl-C) via an EXIT trap, so a
+# screenshot run never leaves the desktop in the staged state.
+DESKTOP_PREP_ACTIVE=0
+ORIG_CREATE_DESKTOP="absent"
+ORIG_HIDE_WIDGETS="absent"
+ORIG_DOCK_AUTOHIDE="absent"
+
+read_default() {
+  # $1 = domain, $2 = key; prints the value, or "absent" when the key is unset
+  local value
+  if value=$(defaults read "$1" "$2" 2>/dev/null); then
+    echo "$value"
+  else
+    echo "absent"
+  fi
+}
+
+restore_default() {
+  # $1 = domain, $2 = key, $3 = original value ("absent" deletes the key)
+  local bool_value
+  if [ "$3" = "absent" ]; then
+    defaults delete "$1" "$2" 2>/dev/null || true
+  else
+    if [ "$3" = "1" ]; then bool_value=true; else bool_value=false; fi
+    defaults write "$1" "$2" -bool "$bool_value" 2>/dev/null || true
+  fi
+}
+
+hide_other_apps() {
+  # Best effort: needs Automation permission for the hosting terminal, and
+  # osascript blocks until a first-time permission prompt is answered, so
+  # run it in the background and give up after 10 seconds rather than
+  # stalling the whole run. Skipped silently where it cannot work (e.g. CI,
+  # where the desktop is clean anyway).
+  osascript >/dev/null 2>&1 <<'APPLESCRIPT' &
+tell application "System Events"
+  set visible of every process whose name is not in {"Piper", "Screenshots-Runner", "System Events"} to false
+end tell
+APPLESCRIPT
+  local osa_pid=$!
+  local waited=0
+  while kill -0 "$osa_pid" 2>/dev/null && [ "$waited" -lt 10 ]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+  kill "$osa_pid" 2>/dev/null || true
+  wait "$osa_pid" 2>/dev/null || true
+}
+
+restore_desktop() {
+  if [ "$DESKTOP_PREP_ACTIVE" = "1" ]; then
+    echo "→ Restoring desktop settings"
+    restore_default com.apple.finder CreateDesktop "$ORIG_CREATE_DESKTOP"
+    restore_default com.apple.WindowManager StandardHideWidgets "$ORIG_HIDE_WIDGETS"
+    restore_default com.apple.dock autohide "$ORIG_DOCK_AUTOHIDE"
+    killall Finder 2>/dev/null || true
+    killall Dock 2>/dev/null || true
+    DESKTOP_PREP_ACTIVE=0
+  fi
+}
+
+prepare_desktop() {
+  ORIG_CREATE_DESKTOP=$(read_default com.apple.finder CreateDesktop)
+  ORIG_HIDE_WIDGETS=$(read_default com.apple.WindowManager StandardHideWidgets)
+  ORIG_DOCK_AUTOHIDE=$(read_default com.apple.dock autohide)
+  DESKTOP_PREP_ACTIVE=1
+  trap restore_desktop EXIT
+  echo "→ Hiding desktop icons, widgets, Dock and other apps for screenshots"
+  defaults write com.apple.finder CreateDesktop -bool false
+  defaults write com.apple.WindowManager StandardHideWidgets -bool true
+  defaults write com.apple.dock autohide -bool true
+  killall Finder 2>/dev/null || true
+  killall Dock 2>/dev/null || true
+  hide_other_apps
+}
+# --- End clean-desktop prep ---------------------------------------------------
+
 # Smart arch detection – M4 (arm64) vs old Intel mini (x86_64) vs Rosetta
 HOST_ARCH=$(uname -m)
 if [[ "$HOST_ARCH" == "arm64" ]]; then
@@ -31,6 +112,8 @@ mkdir -p "$CACHE_SCREENSHOTS"
 rm -rf "$OUTPUT_BASE"
 mkdir -p "$OUTPUT_BASE"
 mkdir -p "$CACHE_BASE"
+
+prepare_desktop
 
 # One-time build – avoids rebuilding Piper + SwiftLint for each language
 # FASTLANE_SNAPSHOT=YES makes Project.swift skip SwiftLint phases (speedup)
