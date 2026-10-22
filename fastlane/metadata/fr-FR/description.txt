@@ -1,0 +1,17 @@
+Améliorez la synthèse vocale de votre appareil avec Piper, una solution moderne et respectueuse de la vie privée qui apporte des voix neuronales très naturelles et expressives directement sur iOS et macOS.
+
+Piper s'intègre parfaitement au système d'exploitation, vous permettant d'utiliser des voix de haute fidélité aux intonations humaines avec VoiceOver, « Contenu énoncé », et n'importe quelle application tierce prenant en charge la synthèse vocale du système. Idéal pour l'écoute de longs formats, d'articles et pour l'accessibilité.
+
+IMPORTANT : Piper agit comme un moteur pour votre système. Il ne contient PAS de fichiers vocaux préinstallés afin de limiter la taille initiale de l'application. VOUS DEVEZ D'ABORD OUVRIR L'APPLICATION PIPER POUR TÉLÉCHARGER VOS VOIX PRÉFÉRÉES avant qu'elles n'apparaissent ou puissent être sélectionnées dans les réglages système de votre appareil.
+
+Pourquoi choisir Piper ?
+• Intégration globale au système : Utilisez de superbes voix neuronales nativement avec VoiceOver, les lecteurs d'écran et les fonctionnalités d'assistance sur iOS et macOS.
+• Synthèse vocale haute fidélité : Conçu sur une technologie neuronale avancée pour une prononciation fluide, un rythme naturel (prosodie) et une clarté incroyable.
+• 100 % local et privé : Toute la synthèse vocale s'effectue entièrement sur votre appareil. Aucun traitement cloud, aucun suivi, et aucune connexion Internet requise après le téléchargement des modèles.
+• Bibliothèque multilingue : Choisissez parmi une collection en pleine expansion de langues mondiales, d'accents régionaux et de profils vocaux.
+• Gestion simplifiée des voix : Écoutez facilement des extraits, téléchargez et supprimez des modèles de voix directement dans l'application pour préserver l'espace de stockage de votre appareil.
+
+Parfait pour :
+• Les utilisateurs aveugles et malvoyants à la recherche d'une expérience de lecture d'écran plus naturelle.
+• Les apprenants auditifs qui écoutent des PDF longs, des livres et des articles web.
+• Quiconque souhaite une alternative premium et humaine aux voix système par défaut.

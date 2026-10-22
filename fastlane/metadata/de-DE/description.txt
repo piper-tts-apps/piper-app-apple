@@ -1,0 +1,19 @@
+Piper – High-Quality System Voices
+
+Verbessern Sie die Text-to-Speech-Funktion Ihres Geräts mit Piper – einer modernen, datenschutzfreundlichen Lösung, die hochgradig natürliche, ausdrucksstarke neuronale Stimmen direkt auf iOS und macOS bringt.
+
+Piper integriert sich nahtlos in das Betriebssystem und ermöglicht Ihnen die Nutzung von hochauflösenden, menschlich klingenden Stimmen in VoiceOver, „Gesprochene Inhalte“ und jeder Drittanbieter-App, die die systemeigene Sprachausgabe unterstützt. Ideal für langes Zuhören, Artikel und Barrierefreiheit.
+
+WICHTIG: Piper fungiert als Engine für Ihr System. Um die anfängliche App-Größe gering zu halten, sind keine Sprachdateien vorinstalliert. SIE MÜSSEN ZUERST DIE PIPER-APP ÖFFNEN, UM IHRE BEVORZUGTEN STIMMEN HERUNTERZULADEN, bevor diese in den Systemeinstellungen Ihres Geräts erscheinen oder ausgewählt werden können.
+
+Warum Piper wählen?
+• Systemweite Integration: Nutzen Sie beeindruckende neuronale Stimmen nativ mit VoiceOver, Bildschirmlesern und assistiven Workflows unter iOS und macOS.
+• High-Fidelity-Sprachsynthese: Basiert auf fortschrittlicher neuronaler Technologie für flüssige Aussprache, natürliche Betonung (Prosodie) und unglaubliche Klarheit.
+• 100 % lokal & privat: Die gesamte Sprachsynthese findet vollständig auf Ihrem Gerät statt. Keine Cloud-Verarbeitung, kein Tracking und kein Internet erforderlich, nachdem die Modelle heruntergeladen wurden.
+• Mehrsprachige Bibliothek: Wählen Sie aus einer schnell wachsenden Sammlung globaler Sprachen, regionaler Akzente und Sprachprofile.
+• Saubere Sprachverwaltung: Hören Sie ganz einfach Hörproben an, laden Sie Sprachmodelle herunter und löschen Sie sie direkt in der App, um Speicherplatz zu sparen.
+
+Perfekt für:
+• Blinde und sehbehinderte Nutzer, die ein natürlicheres Bildschirmlese-Erlebnis suchen.
+• Auditiver Lerntyp, die lange PDFs, Bücher und Webartikel anhören.
+• Jeden, der eine hochwertige, menschlich klingende Alternative zu den Standard-Systemstimmen sucht.

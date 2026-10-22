@@ -1,0 +1,17 @@
+Uppgradera enhetens text-till-tal med Piper – en modern, integritetsfokuserad lösning som ger extremt naturliga och uttrycksfulla neurala röster direkt till iOS och macOS.
+
+Piper integreras sömlöst med operativsystemet, vilket gör att du kan använda naturtrogna röster med hög kvalitet i VoiceOver, ”Talat innehåll” och alla tredjepartsappar som stöder systemets röstsyntes. Perfekt för långlyssning, artiklar och tillgänglighet.
+
+VIKTIGT: Piper fungerar som en motor för ditt system. För att hålla appens ursprungliga storlek liten kommer den INTE förinstallerad med röstfiler. DU MÅSTE ÖPPNA PIPER-APPEN FÖRST FÖR ATT LADDA NER DINA RÖSTER innan de visas eller kan väljas i enhetens systeminställningar.
+
+Varför välja Piper?
+• Systemomfattande integrering: Använd fantastiska neurala röster infött med VoiceOver, skärmläsare och hjälpmedelsfunktioner i iOS och macOS.
+• Högkvalitativ röstsyntes: Byggd på avancerad neural teknik för smidigt uttal, naturligt tempo (prosodi) och otrolig tydlighet.
+• 100 % lokalt & privat: All röstsyntes sker helt och hållet på din enhet. Ingen molnbearbetning, ingen spårning och inget internet krävs efter att modellerna har laddats ner.
+• Flerspråkigt bibliotek: Välj från en snabbt växande samling av globala språk, regionala dialekter och röstprofiler.
+• Smidig rösthantering: Lyssna enkelt på prover, ladda ner och ta bort röstmodeller direkt i appen för att spara lagringsutrymme på enheten.
+
+Perfekt för:
+• Blinda och synskadade användare som söker en mer naturlig skärmläsarupplevelse.
+• Auditiva inlärare som lyssnar på långa PDF-filer, böcker och webbartiklar.
+• Alla som vill ha ett mänskligt klingande premiumalternativ till systemets standardröster.

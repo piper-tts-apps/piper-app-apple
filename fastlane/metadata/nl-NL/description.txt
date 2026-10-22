@@ -1,0 +1,17 @@
+Verbeter de tekst-naar-spraakfunctionaliteit van uw apparaat met Piper, een moderne en privacygerichte oplossing die uiterst natuurlijke, expressieve neurale stemmen rechtstreeks naar iOS en macOS brengt.
+
+Piper integreert naadloos met het besturingssysteem, zodat u hoogwaardige, menselijk klinkende stemmen kunt gebruiken in VoiceOver, 'Gesproken tekst' en elke app van derden die ingebouwde spraaksynthese ondersteunt. Ideaal voor langdurig luisteren, artikelen en toegankelijkheid.
+
+BELANGRIJK: Piper werkt als een engine voor uw systeem. Om de initiële app-grootte klein te houden, wordt deze NIET geleverd met vooraf geïnstalleerde stembestanden. U MOET EERST DE PIPER-APP OPENEN OM UW GEWENSTE STEMMEN TE DOWNLOADEN voordat ze verschijnen of geselecteerd kunnen worden in de systeeminstellingen van uw apparaat.
+
+Waarom kiezen voor Piper?
+• Systeembrede integratie: Gebruik prachtige neurale stemmen systeembreed met VoiceOver, schermlezers en ondersteunende functies op iOS en macOS.
+• High-Fidelity Spraaksynthese: Gebouwd op geavanceerde neurale technologie voor een vloeiende uitspraak, natuurlijk ritme (prosodie) en ongelooflijke helderheid.
+• 100% Lokaal & Privé: Alle spraaksynthese vindt volledig plaats op uw eigen apparaat. Geen cloudverwerking, geen tracking en geen internet vereist nadat de modellen zijn gedownload.
+• Meertalige bibliotheek: Kies uit een snelgroeiende collectie wereldwijde talen, regionale accenten en stemprofielen.
+• Overzichtelijk stembeheer: Beluister eenvoudig fragmenten, download en verwijder stemmodellen direct in de app om opslagruimte op uw apparaat te besparen.
+
+Perfect voor:
+• Blinden en slechtzienden die op zoek zijn naar een natuurlijkere schermlezer-ervaring.
+• Auditieve lerders die luisteren naar lange PDF's, boeken en webartikelen.
+• Iedereen die een hoogwaardig, menselijk klinkend alternatief wil voor de standaard systeemstemmen.
