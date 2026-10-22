@@ -97,12 +97,39 @@ struct VoiceItemView: View {
                 .accessibilityHint("uninstall_voice_hint")
         }
         .buttonStyle(.borderless)
-        .alert("uninstall_voice", isPresented: $unstallConfirmationShown) {
-            Button("uninstall_button", role: .destructive) {
-                hostModel.remove(voice: voice)
+    }
+
+    /// The row's commands, shared by the VoiceOver custom actions
+    /// (surfaced through the rotor) and the long-press context menu,
+    /// so each voice can be played, downloaded, updated or removed
+    /// without opening its detail screen.
+    @ViewBuilder
+    private func voiceActions() -> some View {
+        if hostModel.viewModel.isPlaying {
+            Button("stop_playing") {
+                hostModel.stopPlaying()
             }
-            Button("cancel", role: .cancel) {
-                unstallConfirmationShown.toggle()
+        } else if !hostModel.viewModel.isSampleLoading {
+            Button("play_sample") {
+                hostModel.playSample(voice: voice)
+            }
+        }
+        if hostModel.viewModel.isDownloading {
+            Button("cancel_download") {
+                hostModel.cancelDownload(voice: voice)
+            }
+        } else if hostModel.isInstalled(voice) {
+            if hostModel.viewModel.updateAvailable {
+                Button("update_voice") {
+                    hostModel.download(voice: voice)
+                }
+            }
+            Button("uninstall_voice", role: .destructive) {
+                unstallConfirmationShown = true
+            }
+        } else {
+            Button("download_voice") {
+                hostModel.download(voice: voice)
             }
         }
     }
@@ -190,10 +217,24 @@ struct VoiceItemView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint("voice_item_hint")
+            .accessibilityActions {
+                voiceActions()
+            }
             Spacer()
             playDemo()
             download()
         }
         .accessibilityElement(children: .contain)
+        .contextMenu {
+            voiceActions()
+        }
+        .alert("uninstall_voice", isPresented: $unstallConfirmationShown) {
+            Button("uninstall_button", role: .destructive) {
+                hostModel.remove(voice: voice)
+            }
+            Button("cancel", role: .cancel) {
+                unstallConfirmationShown.toggle()
+            }
+        }
     }
 }
