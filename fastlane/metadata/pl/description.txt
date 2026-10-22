@@ -1,0 +1,17 @@
+Ulepsz syntezę mowy w swoim urządzeniu dzięki Piper — nowoczesnemu, dbającemu o prywatność rozwiązaniu, które wprowadza niezwykle naturalne, ekspresyjne głosy neuronowe bezpośrednio do systemów iOS i macOS.
+
+Piper bezproblemowo integruje się z systemem operacyjnym, umożliwiając korzystanie z wysokiej jakości głosów brzmiących jak ludzkie w funkcjach VoiceOver, „Mówiony tekst” oraz w dowolnych aplikacjach zewnętrznych obsługujących systemową syntezę mowy. Idealny do słuchania długich tekstów, artykułów i ułatwień dostępu.
+
+WAŻNE: Piper działa jako silnik dla Twojego systemu. NIE zawiera fabrycznie zainstalowanych plików głosowych, aby początkowy rozmiar aplikacji był jak najmniejszy. MUSISZ NAJPIERW OTWORZYĆ APLIKACJĘ PIPER, ABY POBRAĆ WYBRANE GŁOSY, zanim pojawią się one lub będą mogły zostać wybrane w ustawieniach systemowych urządzenia.
+
+Dlaczego warto wybrać Piper?
+• Integracja z całym systemem: Korzystaj z zachwycających głosów neuronowych natywnie z VoiceOver, czytnikami ekranu i narzędziami wspomagającymi w systemach iOS i macOS.
+• Synteza mowy wysokiej jakości: Zbudowana na zaawansowanej technologii neuronowej, zapewniającej płynną wymowę, naturalne tempo (prozodię) i niesamowitą klarowność.
+• 100% lokalnie i prywatnie: Cała synteza mowy odbywa się w całości na Twoim urządzeniu. Brak przetwarzania w chmurze, brak śledzenia i brak wymogu połączenia z internetem po pobraniu modeli.
+• Wielojęzyczna biblioteka: Wybieraj z szybko rosnącej kolekcji języków z całego świata, akcentów regionalnych i profilów głosowych.
+• Wygodne zarządzanie głosami: Łatwo odsłuchuj próbki, pobieraj i usuwaj modele głosów bezpośrednio w aplikacji, aby oszczędzać pamięć urządzenia.
+
+Idealny dla:
+• Osób niewidomych i słabowidzących, które szukają bardziej naturalnego sposobu czytania ekranu.
+• Słuchowców, którzy odsłuchują długie pliki PDF, książki i artykuły internetowe.
+• Każdego, kto chce otrzymać ludzko brzmiącą alternatywę premium dla domyślnych głosów systemowych.

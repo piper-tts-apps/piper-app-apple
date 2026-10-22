@@ -1,0 +1,17 @@
+iOS ve macOS'e son derece doğal, etkileyici nöral sesler getiren, gizlilik odaklı modern bir metin okuma çözümü olan Piper ile cihazınızın seslendirme özelliğini yükseltin.
+
+Piper, işletim sistemiyle sorunsuz bir şekilde entegre olarak VoiceOver, Seslendirilen İçerik ve sistem konuşma sentezini destekleyen tüm üçüncü taraf uygulamalarda insan sesine yakın, yüksek kaliteli sesler kullanmanıza olanak tanır. Uzun süreli dinlemeler, makaleler ve erişilebilirlik için idealdir.
+
+ÖNEMLİ: Piper, sisteminiz için bir motor görevi görür. İlk uygulama boyutunu küçük tutmak için ses dosyaları hazır olarak GELMEZ. Seslerin cihazınızın sistem ayarlarında görünmesi veya seçilebilmesi için ÖNCE PIPER UYGULAMASINI AÇIP TERCİH ETTİĞİNİZ SESLERİ İNDİRMENİZ GEREKİR.
+
+Neden Piper'ı Seçmelisiniz?
+• Sistem Genelinde Entegrasyon: iOS ve macOS genelinde harika nöral sesleri VoiceOver, ekran okuyucular ve yardımcı iş akışlarıyla yerel olarak kullanın.
+• Yüksek Kaliteli Konuşma Sentezi: Akıcı telaffuz, doğal tempo (prozodi) ve inanılmaz netlik için gelişmiş nöral teknoloji üzerine kurulmuştur.
+• %100 Yerel ve Özel: Tüm konuşma sentezi tamamen cihazınızda gerçekleşir. Modeller indirildikten sonra bulut işleme, takip ve internet bağlantısı gerekmez.
+• Çok Dilli Kütüphane: Hızla büyüyen küresel diller, bölgesel aksanlar ve ses profilleri koleksiyonundan seçim yapın.
+• Temiz Ses Yönetimi: Cihaz depolama alanından tasarruf etmek için uygulama içinde ses örneklerini kolayca dinleyin, indirin ve silin.
+
+Şunlar İçin Mükemmeldir:
+• Daha doğal bir ekran okuma deneyimi arayan görme engelli ve az gören kullanıcılar.
+• Uzun PDF'leri, kitapları ve web makalelerini dinleyen işitsel öğreniciler.
+• Varsayılan sistem seslerine insan gibi tınlayan, premium bir alternatif isteyen herkes.
