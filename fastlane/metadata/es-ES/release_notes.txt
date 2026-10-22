@@ -1,1 +1,3 @@
-- Allmänna buggfixar och prestatiebyttringar.
+- Interfaz actualizada: una sola lista de voces con búsqueda y tus idiomas instalados primero
+- Se añadió compatibilidad con el idioma japonés
+- Correcciones de errores y pequeñas mejoras

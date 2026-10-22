@@ -1,1 +1,3 @@
-- Genel hata düzeltmeleri ve performans iyileştirmeleri.
+- Güncellenmiş arayüz: arama ve yüklü dillerinizin ilk sırada olduğu tek bir ses listesi
+- Japonca dil desteği eklendi
+- Hata düzeltmeleri ve küçük iyileştirmeler

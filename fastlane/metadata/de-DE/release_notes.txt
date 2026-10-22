@@ -1,1 +1,3 @@
-- Allgemeine Fehlerbehebungen und Leistungsverbesserungen.
+- Aktualisierte Oberfläche: eine Stimmenliste mit Suche und Ihre installierten Sprachen zuerst
+- Unterstützung für die japanische Sprache hinzugefügt
+- Fehlerbehebungen und kleine Verbesserungen
