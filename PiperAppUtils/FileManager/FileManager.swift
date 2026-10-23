@@ -5,6 +5,10 @@ import Foundation
 
 extension FileManager {
     public struct ModelPaths {
+        /// The anchor path handed to piper_create: libpiper derives the
+        /// split voice paths (<stem>.encoder.onnx / <stem>.decoder.onnx)
+        /// from it. For a splits-only voice the file itself is absent -
+        /// only the two split parts and the json exist on disk.
         public let model: URL
         public let json: URL
         public let info: ModelInfo?
@@ -24,7 +28,10 @@ extension FileManager {
 
         /// Location of the encoder part of a split voice, derived from the
         /// model URL using the fixed storage file name libpiper expects
-        /// next to the model (see Constants).
+        /// next to the model (see Constants). Installed voices always use
+        /// these fixed storage names inside one voice folder, so no
+        /// separate stored split URLs are needed: deriving from the
+        /// anchor covers classic, full+split, and splits-only layouts.
         public var encoder: URL {
             return model.deletingLastPathComponent()
                 .appendingPathComponent(PiperAppUtils.Constants.modelEncoderFileNameWithExtension)
@@ -88,9 +95,14 @@ extension FileManager {
             return ImportedModelFiles(model: model, json: json, encoder: encoder, decoder: decoder)
         }
 
+        /// Whether the voice's files are on disk: the json must exist,
+        /// and either the full model file or both split parts (a
+        /// splits-only voice has no model file - see `model`).
         public var exist: Bool {
-            return FileManager.default.fileExists(atPath: model.path) &&
-            FileManager.default.fileExists(atPath: json.path)
+            guard FileManager.default.fileExists(atPath: json.path) else {
+                return false
+            }
+            return FileManager.default.fileExists(atPath: model.path) || hasSplitModel
         }
 
         public var modelFolder: URL? {

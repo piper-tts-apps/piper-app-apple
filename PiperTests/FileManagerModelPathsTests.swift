@@ -231,6 +231,63 @@ final class FileManagerModelPathsTests: XCTestCase {
         XCTAssertEqual(imported.decoder, lessacDecoder)
     }
 
+    // MARK: - exist for split voices (issue #94 two-onnx refactor)
+
+    private func makeVoiceFolder(files: [String]) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for name in files {
+            try Data("x".utf8).write(to: folder.appendingPathComponent(name))
+        }
+        return folder
+    }
+
+    private func voicePaths(in folder: URL) -> FileManager.ModelPaths {
+        return FileManager.ModelPaths(model: folder.appendingPathComponent("model.onnx"),
+                                      json: folder.appendingPathComponent("model.onnx.json"))!
+    }
+
+    func testExistClassicModelAndJSON() throws {
+        let folder = try makeVoiceFolder(files: ["model.onnx", "model.onnx.json"])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        XCTAssertTrue(voicePaths(in: folder).exist)
+    }
+
+    func testExistSplitsOnlyWithoutModelFile() throws {
+        let folder = try makeVoiceFolder(files: ["model.encoder.onnx",
+                                                 "model.decoder.onnx",
+                                                 "model.onnx.json"])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let paths = voicePaths(in: folder)
+        XCTAssertTrue(paths.hasSplitModel)
+        XCTAssertTrue(paths.exist)
+    }
+
+    func testExistFalseWithOnlyOneSplitPart() throws {
+        let folder = try makeVoiceFolder(files: ["model.encoder.onnx", "model.onnx.json"])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        XCTAssertFalse(voicePaths(in: folder).exist)
+    }
+
+    func testExistFalseWithSplitsButNoJSON() throws {
+        let folder = try makeVoiceFolder(files: ["model.encoder.onnx", "model.decoder.onnx"])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        XCTAssertFalse(voicePaths(in: folder).exist)
+    }
+
+    func testCodableRoundTripSplitsOnlyEntryReportsExist() throws {
+        let folder = try makeVoiceFolder(files: ["model.encoder.onnx",
+                                                 "model.decoder.onnx",
+                                                 "model.onnx.json"])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let original = voicePaths(in: folder)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(FileManager.ModelPaths.self, from: data)
+        XCTAssertEqual(decoded.model, original.model)
+        XCTAssertEqual(decoded.json, original.json)
+        XCTAssertTrue(decoded.exist)
+    }
+
     func testImportedModelFilesEmptySelection() {
         let imported = FileManager.ModelPaths.importedModelFiles(among: [])
         XCTAssertNil(imported.model)
