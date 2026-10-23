@@ -99,16 +99,22 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
         viewModel.selectedJSONURL = json
     }
 
-    func install() {
-        let selectedModel = viewModel.selectedModelURL
-        // Splits-only (issue #94): no model file was selected. The
-        // anchor libpiper derives the split paths from is the parts'
-        // sibling <base>.onnx, which does not exist as a file.
-        let anchor = selectedModel ?? viewModel.selectedEncoderURL.map { encoder in
+    /// The model anchor for the current selection: the selected model
+    /// file itself, or - splits-only (issue #94) - the parts' sibling
+    /// <base>.onnx, which does not exist as a file.
+    private var selectedAnchor: URL? {
+        if let selectedModel = viewModel.selectedModelURL {
+            return selectedModel
+        }
+        return viewModel.selectedEncoderURL.map { encoder in
             encoder.deletingPathExtension().deletingPathExtension()
                 .appendingPathExtension(PiperAppUtils.Constants.modelExtensiom)
         }
-        guard let paths = FileManager.ModelPaths(model: anchor,
+    }
+
+    func install() {
+        let selectedModel = viewModel.selectedModelURL
+        guard let paths = FileManager.ModelPaths(model: selectedAnchor,
                                                  json: viewModel.selectedJSONURL) else {
             Log.error("Failed to find model or model JSON file")
             return

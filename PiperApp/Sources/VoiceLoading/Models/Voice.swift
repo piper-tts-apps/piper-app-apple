@@ -41,25 +41,6 @@ class Voice: Decodable {
         }
     }
 
-    struct VoiceSplit: Decodable {
-        let encoder: VoiceSplitPart
-        let decoder: VoiceSplitPart
-    }
-
-    struct VoiceSplitPart: Decodable {
-        let model: String
-        let sizeBytes: Int
-        /// Part digest for download verification and update detection,
-        /// in the same format as `VoiceFile.md5Digest`.
-        let md5Digest: String?
-
-        enum CodingKeys: String, CodingKey {
-            case model
-            case sizeBytes = "size_bytes"
-            case md5Digest = "md5_digest"
-        }
-    }
-
     enum CodingKeys: String, CodingKey {
         case key
         case name
@@ -161,5 +142,27 @@ extension Voice {
     }()
     var isSupported: Bool {
         return !Voice.unsupportedVoices.contains(name)
+    }
+}
+
+/// Split (encoder/decoder) build of a voice, from the catalog's
+/// top-level `split` field. File-scope like `VoiceFile`, so the
+/// per-part key mapping does not nest inside `Voice`.
+struct VoiceSplit: Decodable {
+    let encoder: VoiceSplitPart
+    let decoder: VoiceSplitPart
+}
+
+struct VoiceSplitPart: Decodable {
+    let model: String
+    let sizeBytes: Int
+    /// Part digest for download verification and update detection,
+    /// in the same format as `VoiceFile.md5Digest`.
+    let md5Digest: String?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case sizeBytes = "size_bytes"
+        case md5Digest = "md5_digest"
     }
 }

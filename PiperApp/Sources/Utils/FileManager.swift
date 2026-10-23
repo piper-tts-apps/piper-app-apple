@@ -45,26 +45,7 @@ extension FileManager {
         try fileManager.createModelPathsFolder(paths: destination)
         try fileManager.copyItem(at: paths.json, to: destination.json)
         try fileManager.markFileAsUnprotected(at: destination.json)
-
-        if fileManager.fileExists(atPath: paths.model.path) {
-            try fileManager.copyItem(at: paths.model, to: destination.model)
-            try fileManager.markFileAsUnprotected(at: destination.model)
-
-            // Optional split voice parts (issue #94 streaming): without
-            // them the voice still works (threaded, unsplit), so a failed
-            // copy must not fail the install.
-            if let encoder, let decoder {
-                copySplitModelParts(encoder: encoder, decoder: decoder, to: destination)
-            }
-        } else if let encoder, let decoder {
-            // Splits-only voice (issue #94): there is no source model to
-            // copy - the destination model URL stays an anchor that
-            // libpiper derives the split paths from. The parts ARE the
-            // voice here, so their copy must not fail silently.
-            try copySplitModelPartsStrict(encoder: encoder, decoder: decoder, to: destination)
-        } else {
-            throw InstallError.invalidSourceFiles
-        }
+        try copyModelFiles(paths: paths, encoder: encoder, decoder: decoder, to: destination)
 
         if let info = paths.info, info.language.code.lowercased().hasPrefix("zh") {
             if let g2pwFolder = FileManager.Constants.g2pwFolderURL,
@@ -84,6 +65,31 @@ extension FileManager {
         installedEntry.catalogKey = catalogKey
         installedModels.append(installedEntry)
         FileManager.ModelPaths.installedModels = installedModels
+    }
+
+    /// Copies the model side of an install: the full model when the
+    /// source has one (with the split parts as a best-effort extra -
+    /// without them the voice still works, threaded and unsplit), or,
+    /// for splits-only voices (issue #94), just the split parts and
+    /// strictly: the destination model URL stays an anchor that
+    /// libpiper derives the split paths from, and the parts ARE the
+    /// voice, so their copy must not fail silently.
+    private func copyModelFiles(paths: ModelPaths,
+                                encoder: URL?,
+                                decoder: URL?,
+                                to destination: ModelPaths) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: paths.model.path) {
+            try fileManager.copyItem(at: paths.model, to: destination.model)
+            try fileManager.markFileAsUnprotected(at: destination.model)
+            if let encoder, let decoder {
+                copySplitModelParts(encoder: encoder, decoder: decoder, to: destination)
+            }
+        } else if let encoder, let decoder {
+            try copySplitModelPartsStrict(encoder: encoder, decoder: decoder, to: destination)
+        } else {
+            throw InstallError.invalidSourceFiles
+        }
     }
 
     /// Stores split voice parts next to a destination model, under the
