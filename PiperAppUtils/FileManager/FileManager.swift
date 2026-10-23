@@ -62,6 +62,32 @@ extension FileManager {
             return (encoder, decoder)
         }
 
+        /// Classifies an arbitrary import selection into the parts of one
+        /// voice: the model is the `.onnx` file that is not a split part,
+        /// the json is the `.json` file, and the split parts are matched
+        /// to the model with the same rules as `splitModelFiles`.
+        /// Files that are none of these (e.g. a readme) are ignored, and
+        /// when several models are present the first one wins and only
+        /// its own parts are returned.
+        public static func importedModelFiles(among urls: [URL]) -> ImportedModelFiles {
+            let modelExtension = PiperAppUtils.Constants.modelExtensiom
+            let model = urls.first { url in
+                url.pathExtension.lowercased() == modelExtension &&
+                    !url.lastPathComponent.hasSuffix(".encoder.\(modelExtension)") &&
+                    !url.lastPathComponent.hasSuffix(".decoder.\(modelExtension)")
+            }
+            let json = urls.first {
+                $0.pathExtension.lowercased() == PiperAppUtils.Constants.jsonModelExtension
+            }
+            var encoder: URL?
+            var decoder: URL?
+            if let model, let split = splitModelFiles(forModel: model, among: urls) {
+                encoder = split.encoder
+                decoder = split.decoder
+            }
+            return ImportedModelFiles(model: model, json: json, encoder: encoder, decoder: decoder)
+        }
+
         public var exist: Bool {
             return FileManager.default.fileExists(atPath: model.path) &&
             FileManager.default.fileExists(atPath: json.path)
@@ -212,5 +238,24 @@ extension FileManager.ModelPaths: Hashable {
         hasher.combine(model.standardizedFileURL)
         hasher.combine(json.standardizedFileURL)
         hasher.combine(info)
+    }
+}
+
+/// The parts of one voice found in a single import selection, as
+/// classified by `FileManager.ModelPaths.importedModelFiles(among:)`.
+/// `encoder` and `decoder` are either both set (and belong to `model`)
+/// or both nil; any part may be missing when the user picked a classic
+/// model + json voice.
+public struct ImportedModelFiles {
+    public let model: URL?
+    public let json: URL?
+    public let encoder: URL?
+    public let decoder: URL?
+
+    public init(model: URL?, json: URL?, encoder: URL?, decoder: URL?) {
+        self.model = model
+        self.json = json
+        self.encoder = encoder
+        self.decoder = decoder
     }
 }

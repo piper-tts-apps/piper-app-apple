@@ -166,4 +166,76 @@ final class FileManagerModelPathsTests: XCTestCase {
         XCTAssertNil(FileManager.ModelPaths.splitModelFiles(forModel: model,
                                                             among: [model, otherEncoder, otherDecoder]))
     }
+
+    // MARK: - importedModelFiles (unified import picker classification)
+
+    private let lessacModel = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.onnx")
+    private let lessacJSON = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.onnx.json")
+    private let lessacEncoder = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.encoder.onnx")
+    private let lessacDecoder = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.decoder.onnx")
+
+    func testImportedModelFilesAllFourParts() {
+        let imported = FileManager.ModelPaths.importedModelFiles(
+            among: [lessacDecoder, lessacJSON, lessacModel, lessacEncoder])
+        XCTAssertEqual(imported.model, lessacModel)
+        XCTAssertEqual(imported.json, lessacJSON)
+        XCTAssertEqual(imported.encoder, lessacEncoder)
+        XCTAssertEqual(imported.decoder, lessacDecoder)
+    }
+
+    func testImportedModelFilesModelAndJSONOnly() {
+        let imported = FileManager.ModelPaths.importedModelFiles(among: [lessacJSON, lessacModel])
+        XCTAssertEqual(imported.model, lessacModel)
+        XCTAssertEqual(imported.json, lessacJSON)
+        XCTAssertNil(imported.encoder)
+        XCTAssertNil(imported.decoder)
+    }
+
+    func testImportedModelFilesModelAndSplitsWithoutJSON() {
+        let imported = FileManager.ModelPaths.importedModelFiles(
+            among: [lessacModel, lessacEncoder, lessacDecoder])
+        XCTAssertEqual(imported.model, lessacModel)
+        XCTAssertNil(imported.json)
+        XCTAssertEqual(imported.encoder, lessacEncoder)
+        XCTAssertEqual(imported.decoder, lessacDecoder)
+    }
+
+    func testImportedModelFilesRejectsPartsOfAnotherModel() {
+        let otherEncoder = URL(fileURLWithPath: "/tmp/voice/de_DE-thorsten-high.encoder.onnx")
+        let otherDecoder = URL(fileURLWithPath: "/tmp/voice/de_DE-thorsten-high.decoder.onnx")
+        let imported = FileManager.ModelPaths.importedModelFiles(
+            among: [lessacModel, lessacJSON, otherEncoder, otherDecoder])
+        XCTAssertEqual(imported.model, lessacModel)
+        XCTAssertEqual(imported.json, lessacJSON)
+        XCTAssertNil(imported.encoder)
+        XCTAssertNil(imported.decoder)
+    }
+
+    func testImportedModelFilesSingleSplitPartIsDropped() {
+        let imported = FileManager.ModelPaths.importedModelFiles(
+            among: [lessacModel, lessacJSON, lessacEncoder])
+        XCTAssertEqual(imported.model, lessacModel)
+        XCTAssertEqual(imported.json, lessacJSON)
+        XCTAssertNil(imported.encoder)
+        XCTAssertNil(imported.decoder)
+    }
+
+    func testImportedModelFilesIgnoresUnrelatedFiles() {
+        let readme = URL(fileURLWithPath: "/tmp/voice/README.md")
+        let notes = URL(fileURLWithPath: "/tmp/voice/notes.txt")
+        let imported = FileManager.ModelPaths.importedModelFiles(
+            among: [notes, lessacModel, lessacJSON, lessacEncoder, lessacDecoder, readme])
+        XCTAssertEqual(imported.model, lessacModel)
+        XCTAssertEqual(imported.json, lessacJSON)
+        XCTAssertEqual(imported.encoder, lessacEncoder)
+        XCTAssertEqual(imported.decoder, lessacDecoder)
+    }
+
+    func testImportedModelFilesEmptySelection() {
+        let imported = FileManager.ModelPaths.importedModelFiles(among: [])
+        XCTAssertNil(imported.model)
+        XCTAssertNil(imported.json)
+        XCTAssertNil(imported.encoder)
+        XCTAssertNil(imported.decoder)
+    }
 }

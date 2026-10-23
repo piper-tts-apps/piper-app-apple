@@ -38,22 +38,23 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
         }
     }
 
-    func select(modelFiles urls: [URL]) {
-        // The model picker allows multiple selection so a split voice can
-        // be imported in one go: the model file plus, optionally, its
-        // <name>.encoder.onnx / <name>.decoder.onnx parts.
-        let model = urls.first { url in
-            !url.lastPathComponent.hasSuffix(".encoder.onnx") &&
-                !url.lastPathComponent.hasSuffix(".decoder.onnx")
+    func select(files urls: [URL]) {
+        // Both import buttons open the same unified picker, so a single
+        // selection can carry the whole voice: the model, its config json
+        // and, for a split voice, its encoder/decoder parts. ModelPaths
+        // classifies the selection; the parts that are present go through
+        // the same per-part selection paths the separate pickers used.
+        let imported = FileManager.ModelPaths.importedModelFiles(among: urls)
+        if imported.model != nil {
+            select(model: imported.model)
+            // Split parts belong to the model they were classified
+            // against: (re)selecting a model replaces the parts of any
+            // previous selection, clearing them when it brings none.
+            viewModel.selectedEncoderURL = imported.encoder
+            viewModel.selectedDecoderURL = imported.decoder
         }
-        select(model: model)
-        if let model,
-           let split = FileManager.ModelPaths.splitModelFiles(forModel: model, among: urls) {
-            viewModel.selectedEncoderURL = split.encoder
-            viewModel.selectedDecoderURL = split.decoder
-        } else {
-            viewModel.selectedEncoderURL = nil
-            viewModel.selectedDecoderURL = nil
+        if imported.json != nil {
+            select(json: imported.json)
         }
     }
 
