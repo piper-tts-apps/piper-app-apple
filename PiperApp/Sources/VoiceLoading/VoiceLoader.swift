@@ -245,10 +245,11 @@ class VoiceLoader: NSObject {
 
             let band: DownloadProgressBand = (weight: modelWeight, base: modelBaseProgress)
             let paths: FileManager.ModelPaths
-            if let split = voice.split {
-                // Split build (issue #94): fetch the encoder+decoder
-                // parts instead of the full model; the voice installs
-                // splits-only.
+            if let split = voice.selectedSplit {
+                // Split build (issue #94), with the Streaming voices
+                // setting on: fetch the encoder+decoder parts instead
+                // of the full model; the voice installs splits-only.
+                // With the setting off the classic model downloads.
                 let staged = try await downloadSplitModel(split: split,
                                                           jsonLocalURL: jsonLocalURL,
                                                           session: session,

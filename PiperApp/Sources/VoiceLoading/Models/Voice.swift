@@ -65,9 +65,18 @@ class Voice: Decodable {
         ModelFormat.current == .compact && compactVariant != nil
     }
 
+    /// The split build downloads and sizes currently follow for this
+    /// voice, if any: the Streaming voices setting is on and the
+    /// catalog offers a split build. The setting gates downloads
+    /// only - an installed split voice keeps streaming whatever the
+    /// setting says.
+    var selectedSplit: VoiceSplit? {
+        StreamingVoices.isEnabled ? split : nil
+    }
+
     var voiceSize: Int {
-        if let split {
-            // Split entries download the encoder+decoder parts instead
+        if let split = selectedSplit {
+            // Split downloads fetch the encoder+decoder parts instead
             // of the full model: the displayed size is the pair plus
             // the config file every layout shares.
             let configSize = jsonPath.flatMap { files[$0]?.size_bytes } ?? 0

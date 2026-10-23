@@ -41,6 +41,16 @@ enum VoiceUpdateChecker {
         var splitDecoderSize: Int?
     }
 
+    /// The comparison follows the layout that is actually
+    /// installed, never the Streaming voices setting - the setting
+    /// governs new downloads only. A classic install compares
+    /// against the catalog's classic files even when the entry also
+    /// offers a split build (comparing it against the split parts
+    /// would flag a permanent phantom update), and a splits-only
+    /// install keeps comparing per-part even if the setting has
+    /// since been turned off: it is a working streaming voice, not
+    /// a stale classic one, so the toggle must not force it into a
+    /// re-download.
     static func status(voice: Voice, installed: InstalledFiles) -> VoiceUpdateStatus {
         if installed.isSplitsOnly {
             return splitsOnlyStatus(voice: voice, installed: installed)
