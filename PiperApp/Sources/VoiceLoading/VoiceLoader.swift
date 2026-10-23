@@ -97,7 +97,24 @@ class VoiceLoader: NSObject {
                 voices: voices,
                 installed: installed
             ) { paths in
-                VoiceUpdateChecker.InstalledFiles(
+                if !FileManager.default.fileExists(atPath: paths.model.path), paths.hasSplitModel {
+                    // Splits-only install (issue #94): there is no model
+                    // file or model digest; the model slot carries the
+                    // pair's total size and the two part digests are
+                    // compared against the catalog's split build.
+                    return VoiceUpdateChecker.InstalledFiles(
+                        modelSize: (self.fileSize(at: paths.encoder) ?? 0) +
+                            (self.fileSize(at: paths.decoder) ?? 0),
+                        modelMD5: nil,
+                        configMD5: self.cachedMD5Digest(of: paths.json),
+                        isSplitsOnly: true,
+                        splitEncoderMD5: self.cachedMD5Digest(of: paths.encoder),
+                        splitDecoderMD5: self.cachedMD5Digest(of: paths.decoder),
+                        splitEncoderSize: self.fileSize(at: paths.encoder),
+                        splitDecoderSize: self.fileSize(at: paths.decoder)
+                    )
+                }
+                return VoiceUpdateChecker.InstalledFiles(
                     modelSize: self.fileSize(at: paths.model),
                     modelMD5: self.cachedMD5Digest(of: paths.model),
                     configMD5: self.cachedMD5Digest(of: paths.json)
@@ -231,13 +248,6 @@ class VoiceLoader: NSObject {
                                  continuation: AsyncThrowingStream<DownloadEvent, Swift.Error>.Continuation) async {
         var downloadedFiles: [URL] = []
         do {
-            guard let modelPath = voice.modelPath else {
-                throw Error.loadingFailed
-            }
-            guard let modelURL = URL(string: "\(Constants.baseURL)/\(modelPath)") else {
-                throw Error.nilURL
-            }
-
             let jsonLocalURL = try await downloadVoiceConfig(voice: voice, session: session, continuation: continuation)
             downloadedFiles.append(jsonLocalURL)
 
@@ -255,19 +265,41 @@ class VoiceLoader: NSObject {
                 modelBaseProgress = 0.35
             }
 
-            // Model is large → weight 95% (65% after a dictionary fetch)
-            let modelLocalURL = try await self.downloadFile(
-                from: modelURL,
-                session: session,
-                weight: modelWeight,
-                baseProgress: modelBaseProgress,
-                continuation: continuation
-            )
-            downloadedFiles.append(modelLocalURL)
+            let paths: FileManager.ModelPaths
+            if let split = voice.split {
+                // Split build (issue #94): fetch the encoder+decoder
+                // parts instead of the full model; the voice installs
+                // splits-only.
+                paths = try await downloadSplitModel(split: split,
+                                                     jsonLocalURL: jsonLocalURL,
+                                                     session: session,
+                                                     weight: modelWeight,
+                                                     baseProgress: modelBaseProgress,
+                                                     continuation: continuation,
+                                                     downloadedFiles: &downloadedFiles)
+            } else {
+                guard let modelPath = voice.modelPath else {
+                    throw Error.loadingFailed
+                }
+                guard let modelURL = URL(string: "\(Constants.baseURL)/\(modelPath)") else {
+                    throw Error.nilURL
+                }
 
-            guard let paths = FileManager.ModelPaths(model: modelLocalURL,
-                                                     json: jsonLocalURL) else {
-                throw Error.loadingFailed
+                // Model is large → weight 95% (65% after a dictionary fetch)
+                let modelLocalURL = try await self.downloadFile(
+                    from: modelURL,
+                    session: session,
+                    weight: modelWeight,
+                    baseProgress: modelBaseProgress,
+                    continuation: continuation
+                )
+                downloadedFiles.append(modelLocalURL)
+
+                guard let classicPaths = FileManager.ModelPaths(model: modelLocalURL,
+                                                                json: jsonLocalURL) else {
+                    throw Error.loadingFailed
+                }
+                paths = classicPaths
             }
 
             continuation.yield(.finished(paths))
@@ -366,6 +398,67 @@ class VoiceLoader: NSObject {
     private func fetchOpenJTalkManifest() async throws -> OpenJTalkManifest {
         let (data, _) = try await URLSession.shared.data(from: OpenJTalkDataManager.dictionaryManifestURL)
         return try JSONDecoder().decode(OpenJTalkManifest.self, from: data)
+    }
+
+    /// Downloads a voice's split build (issue #94): the encoder and
+    /// decoder parts instead of the full model. Each part is verified
+    /// against the catalog (size always, digest where the catalog
+    /// carries one) before it counts as downloaded. The parts are
+    /// staged in a per-download folder under the anchor name libpiper
+    /// derives them from, so the returned paths are the splits-only
+    /// layout: an anchor with no file behind it and the parts at the
+    /// derived encoder/decoder URLs.
+    private func downloadSplitModel(split: Voice.VoiceSplit,
+                                    jsonLocalURL: URL,
+                                    session: UUID,
+                                    weight: Double,
+                                    baseProgress: Double,
+                                    continuation: AsyncThrowingStream<DownloadEvent, Swift.Error>.Continuation,
+                                    downloadedFiles: inout [URL]) async throws -> FileManager.ModelPaths {
+        guard let tempFolder = FileManager.tempFolderInDocumentDirectory else {
+            throw Error.loadingFailed
+        }
+        try FileManager.default.createTemporaryDirectoryIfNeeded()
+        let folder = tempFolder.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        downloadedFiles.append(folder)
+        let anchor = folder.appendingPathComponent(PiperAppUtils.Constants.modelFileNameWithExtension)
+        guard let paths = FileManager.ModelPaths(model: anchor, json: jsonLocalURL) else {
+            throw Error.loadingFailed
+        }
+        let parts: [(part: Voice.VoiceSplitPart, destination: URL)] = [
+            (split.encoder, paths.encoder),
+            (split.decoder, paths.decoder)
+        ]
+        let partWeight = weight / 2
+        for (index, item) in parts.enumerated() {
+            guard let partURL = URL(string: "\(Constants.baseURL)/\(item.part.model)") else {
+                throw Error.nilURL
+            }
+            let localURL = try await downloadFile(
+                from: partURL,
+                session: session,
+                weight: partWeight,
+                baseProgress: baseProgress + partWeight * Double(index),
+                continuation: continuation
+            )
+            downloadedFiles.append(localURL)
+            try verifyDownloadedPart(localURL, part: item.part)
+            try FileManager.default.moveItem(at: localURL, to: item.destination)
+        }
+        return paths
+    }
+
+    /// A downloaded split part counts only when it is exactly the
+    /// file the catalog describes.
+    private func verifyDownloadedPart(_ url: URL, part: Voice.VoiceSplitPart) throws {
+        guard fileSize(at: url) == part.sizeBytes else {
+            throw Error.loadingFailed
+        }
+        if let expectedMD5 = part.md5Digest,
+           VoiceUpdateChecker.md5Digest(ofFileAt: url)?.caseInsensitiveCompare(expectedMD5) != .orderedSame {
+            throw Error.loadingFailed
+        }
     }
 
     private func downloadFile(
