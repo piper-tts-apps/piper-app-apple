@@ -102,6 +102,28 @@ class PiperManager {
         }
     }
     
+    /// Installs files a catalog download produced and removes the
+    /// temporary download files afterwards. For a splits-only download
+    /// the paths' model is an anchor with no file behind it; its split
+    /// parts sit at the derived encoder/decoder URLs and are passed
+    /// through so the install stores them instead of a full model.
+    func installDownloaded(paths: FileManager.ModelPaths, catalogKey: String?) async {
+        let splitsOnly = !FileManager.default.fileExists(atPath: paths.model.path) && paths.hasSplitModel
+        await install(paths: paths,
+                      catalogKey: catalogKey,
+                      encoder: splitsOnly ? paths.encoder : nil,
+                      decoder: splitsOnly ? paths.decoder : nil)
+        try? FileManager.default.removeItem(at: paths.json)
+        try? FileManager.default.removeItem(at: paths.model)
+        if splitsOnly {
+            try? FileManager.default.removeItem(at: paths.encoder)
+            try? FileManager.default.removeItem(at: paths.decoder)
+            // The downloaded parts lived in their own temporary folder
+            // (see VoiceLoader); remove it once it is empty.
+            try? FileManager.default.removeItem(at: paths.model.deletingLastPathComponent())
+        }
+    }
+
     func unstall(paths: FileManager.ModelPaths) {
         if !paths.exist {
             Log.debug("Nothing to uninstall")
