@@ -12,6 +12,7 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     private var _outputBusses: AUAudioUnitBusArray!
 
     private var request: AVSpeechSynthesisProviderRequest?
+    internal var requestTracker = SpeechRequestTracker()
 
     private var format: AVAudioFormat
 
@@ -105,35 +106,44 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
 
         let intFrameCount = Int(frameCount)
         let availableCount: Int
+        let outcomeSnapshot: SpeechRequestTracker
+        let isRequestActive: Bool
         os_unfair_lock_lock(&outputDataLock)
         availableCount = outputData.count
+        outcomeSnapshot = requestTracker
+        isRequestActive = self.request != nil
         os_unfair_lock_unlock(&outputDataLock)
 
         let countToCopy = min(availableCount, intFrameCount)
+        let isTruncated = outcomeSnapshot.outcome.isTruncated
 
         if countToCopy < intFrameCount {
             let completedRendering = piper.completed()
-            if (completedRendering && availableCount == 0) || request == nil {
-                Log.debug(type: .synthesizer, "Completed rendering")
-                actionFlags.pointee = .offlineUnitRenderAction_Complete
-                self.cleanUp()
+            if outcomeSnapshot.shouldCompleteRendering(availableSamples: availableCount,
+                                                       engineCompleted: completedRendering,
+                                                       requestActive: isRequestActive) {
+                completeRender(actionFlags: actionFlags, isTruncated: isTruncated)
                 return noErr
             }
 
-            outputRecurseCallNumber += 1
-            if outputRecurseCallNumber < outputRecurseCallNumberMax && !completedRendering {
-                Log.error(type: .synthesizer, "Rendering in progress no data. Trying one more time: \(self.outputRecurseCallNumber)")
-                pauseUntil(maxDelayFactor: outputRecurseCallNumberMax) { [weak self] in
-                    guard let self else { return true }
-                    os_unfair_lock_lock(&self.outputDataLock)
-                    let hasEnoughData = self.outputData.count >= intFrameCount
-                    let isCancelled = self.request == nil || !self.requestGate.isCurrent(renderGeneration)
-                    os_unfair_lock_unlock(&self.outputDataLock)
-                    return piper.completed() || hasEnoughData || isCancelled
+            // A truncated request has no live engine feeding it, so render
+            // what remains without the retry backoff.
+            if !isTruncated {
+                outputRecurseCallNumber += 1
+                if outputRecurseCallNumber < outputRecurseCallNumberMax && !completedRendering {
+                    Log.error(type: .synthesizer, "Rendering in progress no data. Trying one more time: \(self.outputRecurseCallNumber)")
+                    pauseUntil(maxDelayFactor: outputRecurseCallNumberMax) { [weak self] in
+                        guard let self else { return true }
+                        os_unfair_lock_lock(&self.outputDataLock)
+                        let hasEnoughData = self.outputData.count >= intFrameCount
+                        let isCancelled = self.request == nil || !self.requestGate.isCurrent(renderGeneration)
+                        os_unfair_lock_unlock(&self.outputDataLock)
+                        return piper.completed() || hasEnoughData || isCancelled
+                    }
+                    return doPerformRender(actionFlags: actionFlags, timestamp: timestamp, frameCount: frameCount, outputBusNumber: outputBusNumber, outputAudioBufferList: outputAudioBufferList, renderEvents: renderEvents, renderPull: renderPull)
                 }
-                return doPerformRender(actionFlags: actionFlags, timestamp: timestamp, frameCount: frameCount, outputBusNumber: outputBusNumber, outputAudioBufferList: outputAudioBufferList, renderEvents: renderEvents, renderPull: renderPull)
+                Log.error(type: .synthesizer, "Tried \(self.outputRecurseCallNumber), without luck. Returning what have currently")
             }
-            Log.error(type: .synthesizer, "Tried \(self.outputRecurseCallNumber), without luck. Returning what have currently")
         }
 
         outputRecurseCallNumber = 0
@@ -166,6 +176,26 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         return noErr
     }
 
+    /// Finishes the render pass: for a truncated request emits an explicit
+    /// bookmark marker so downstream consumers can tell it apart from a
+    /// normally completed one, then cleans up.
+    private func completeRender(actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+                                isTruncated: Bool) {
+        os_unfair_lock_lock(&outputDataLock)
+        let metadataBlock = self.speechSynthesisOutputMetadataBlock
+        let currentRequest = self.request
+        requestTracker.complete()
+        os_unfair_lock_unlock(&outputDataLock)
+        if isTruncated, let metadataBlock, let currentRequest {
+            Log.error(type: .synthesizer, "Request truncated at \(self.maxBufferDurationSeconds)s buffer cap")
+            emitTruncationMarker(metadataBlock: metadataBlock, request: currentRequest)
+        } else {
+            Log.debug(type: .synthesizer, "Completed rendering")
+        }
+        actionFlags.pointee = .offlineUnitRenderAction_Complete
+        self.cleanUp()
+    }
+
     public override func synthesizeSpeechRequest(_ speechRequest: AVSpeechSynthesisProviderRequest) {
         Log.debug("synthesizeSpeechRequest \(speechRequest.ssmlRepresentation)")
         guard let speakerId = speechRequest.voice.identifier.speakerId else {
@@ -177,6 +207,7 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         os_unfair_lock_lock(&outputDataLock)
         self.request = speechRequest
         self.activeGeneration = generation
+        self.requestTracker.begin()
         os_unfair_lock_unlock(&outputDataLock)
         createPiperIfNeeded(voiceIdentifier: speechRequest.voice.identifier)
         piper?.synthesizeSSML(speechRequest.ssmlRepresentation,
@@ -198,8 +229,22 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         os_unfair_lock_lock(&outputDataLock)
         request = nil
         outputData.clear()
+        requestTracker.cancel()
         os_unfair_lock_unlock(&outputDataLock)
         piper?.cancel()
+    }
+
+    /// Emits an explicit bookmark marker so downstream consumers can tell a
+    /// truncated request apart from a normally completed one.
+    private func emitTruncationMarker(metadataBlock: AVSpeechSynthesisProviderOutputBlock,
+                                      request: AVSpeechSynthesisProviderRequest) {
+        let marker = AVSpeechSynthesisMarker(markerType: .bookmark,
+                                             forTextRange: NSRange(location: 0, length: 0),
+                                             atByteSampleOffset: 0)
+        if #available(iOS 17.0, macOS 14.0, *) {
+            marker.bookmarkName = "truncated"
+        }
+        metadataBlock([marker], request)
     }
 
     internal func pauseUntil(maxDelayFactor: UInt32, or condition: @escaping () -> Bool) {
@@ -293,20 +338,32 @@ extension PiperTTSAudioUnit: PiperDelegate {
     public func piperDidReceiveSamples(_ samples: UnsafePointer<Float>, withSize size: Int) {
         let buf = UnsafeBufferPointer(start: samples, count: size)
         if size == 0 { return }
+
+        // Resample outside the lock, as before; the cap is enforced under the lock below.
+        let resampled: [Float]?
         if let modelFormat = model?.audioFormat,
            modelFormat.sampleRate != format.sampleRate {
-            let resampled = AudioResampler.resampleBuffer(buf, inputRate: modelFormat.sampleRate, outputRate: format.sampleRate)
-            os_unfair_lock_lock(&outputDataLock)
-            if requestGate.isCurrent(activeGeneration) {
-                outputData.appendAndEnforceMax(contentsOf: resampled, maxCount: maxSamplesCount)
-            }
-            os_unfair_lock_unlock(&outputDataLock)
+            resampled = AudioResampler.resampleBuffer(buf, inputRate: modelFormat.sampleRate, outputRate: format.sampleRate)
         } else {
-            os_unfair_lock_lock(&outputDataLock)
-            if requestGate.isCurrent(activeGeneration) {
-                outputData.appendAndEnforceMax(contentsOf: buf, maxCount: maxSamplesCount)
+            resampled = nil
+        }
+
+        os_unfair_lock_lock(&outputDataLock)
+        var didTruncate = false
+        if requestGate.isCurrent(activeGeneration), case .inProgress = requestTracker.outcome {
+            let dropped: Int
+            if let resampled {
+                dropped = outputData.appendUpToMax(contentsOf: resampled, maxCount: maxSamplesCount)
+            } else {
+                dropped = outputData.appendUpToMax(contentsOf: buf, maxCount: maxSamplesCount)
             }
-            os_unfair_lock_unlock(&outputDataLock)
+            didTruncate = requestTracker.recordOverflow(droppedSamples: dropped)
+        }
+        os_unfair_lock_unlock(&outputDataLock)
+
+        if didTruncate {
+            Log.error(type: .synthesizer, "Audio buffer reached \(self.maxBufferDurationSeconds)s cap; truncating request")
+            piper?.cancel()
         }
     }
 

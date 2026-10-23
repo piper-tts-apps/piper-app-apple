@@ -67,20 +67,36 @@ public struct FloatRingBuffer {
         }
     }
 
-    public mutating func appendAndEnforceMax(contentsOf newElements: [Float], maxCount: Int) {
-        append(contentsOf: newElements)
-        if count > maxCount {
-            let overflow = count - maxCount
-            removeFirst(overflow)
+    /// Appends samples without exceeding `maxCount`.
+    ///
+    /// The oldest samples are never discarded: only the newest excess that
+    /// does not fit is dropped, so callers can surface the truncation
+    /// explicitly instead of silently losing the beginning of the audio.
+    /// - Returns: the number of samples that did not fit and were dropped.
+    @discardableResult
+    public mutating func appendUpToMax(contentsOf newElements: [Float], maxCount: Int) -> Int {
+        let room = max(0, maxCount - count)
+        let fittingCount = min(room, newElements.count)
+        if fittingCount > 0 {
+            append(contentsOf: newElements.prefix(fittingCount))
         }
+        return newElements.count - fittingCount
     }
 
-    public mutating func appendAndEnforceMax(contentsOf newElements: UnsafeBufferPointer<Float>, maxCount: Int) {
-        append(contentsOf: newElements)
-        if count > maxCount {
-            let overflow = count - maxCount
-            removeFirst(overflow)
+    /// Appends samples without exceeding `maxCount`.
+    ///
+    /// The oldest samples are never discarded: only the newest excess that
+    /// does not fit is dropped, so callers can surface the truncation
+    /// explicitly instead of silently losing the beginning of the audio.
+    /// - Returns: the number of samples that did not fit and were dropped.
+    @discardableResult
+    public mutating func appendUpToMax(contentsOf newElements: UnsafeBufferPointer<Float>, maxCount: Int) -> Int {
+        let room = max(0, maxCount - count)
+        let fittingCount = min(room, newElements.count)
+        if fittingCount > 0, let baseAddress = newElements.baseAddress {
+            append(contentsOf: UnsafeBufferPointer(start: baseAddress, count: fittingCount))
         }
+        return newElements.count - fittingCount
     }
 
     private mutating func compact() {

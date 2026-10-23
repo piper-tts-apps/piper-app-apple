@@ -82,7 +82,9 @@ final class LongUtteranceBufferTests: XCTestCase {
         XCTAssertGreaterThan(ring.count, 110_250)
     }
 
-    func testBufferDropBehaviorAtMax() {
+    func testBufferTruncationPolicyAtMax() {
+        // Explicit policy: hitting the 120s cap reports the newest excess as
+        // dropped instead of silently discarding the oldest samples.
         var ring = FloatRingBuffer()
         let maxCount = expectedMaxSamples
         // Fill to max
@@ -90,19 +92,14 @@ final class LongUtteranceBufferTests: XCTestCase {
         ring.append(contentsOf: initial)
         XCTAssertEqual(ring.count, maxCount)
 
-        // Append 100 more with enforceMax – should drop head (oldest), keep tail
         let extra = [Float](repeating: 2.0, count: 100)
-        ring.appendAndEnforceMax(contentsOf: extra, maxCount: maxCount)
+        let dropped = ring.appendUpToMax(contentsOf: extra, maxCount: maxCount)
 
-        XCTAssertEqual(ring.count, maxCount, "After enforceMax, count stays at max")
+        XCTAssertEqual(dropped, 100, "Excess beyond the 120s cap must be reported, not silently absorbed")
+        XCTAssertEqual(ring.count, maxCount, "Buffer stays capped")
         let snap = ring.snapshot
-        // Last 100 should be 2.0 (new tail)
-        let tail = snap.suffix(100)
-        XCTAssertTrue(tail.allSatisfy { $0 == 2.0 }, "Tail must be new data, head dropped")
-        // First element originally 1.0 but after dropping 100 oldest, first should still be 1.0 (since we had all 1.0 before)
-        // But head 100 dropped, so first 100 of original gone. Still 1.0 because remaining original were 1.0.
-        XCTAssertEqual(snap.first, 1.0)
-        // No middle drop – ensure contiguous
+        XCTAssertEqual(snap.first, 1.0, "Oldest samples must be preserved")
+        XCTAssertFalse(snap.contains(2.0), "Newest excess must not displace buffered audio")
         XCTAssertEqual(snap.count, maxCount)
     }
 

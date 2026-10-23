@@ -50,7 +50,7 @@ final class AudioUnitIntegrationTests: XCTestCase {
         // ceil(2_646_000 / 1024) = 2584 renders (last partial 1008 samples)
         XCTAssertEqual(renders, 2584, "Expected ceil division renders for 120s buffer")
 
-        // After draining but not completed, should retry, not complete
+        // After draining but not completed, should retry, not complete early
         let afterDrainNotCompleted = simulateRender(availableCount: 0, frameCount: frameCount, completed: false)
         XCTAssertEqual(afterDrainNotCompleted.action, "retry", "If piper not completed and buffer empty, should retry, not complete early")
 
@@ -60,17 +60,20 @@ final class AudioUnitIntegrationTests: XCTestCase {
     }
 
     func testRenderDoesNotDropMiddleOnLongParagraph() {
-        // Sawyer bug: middle drop made VoiceOver jump. Ensure our ring buffer keeps tail.
+        // Sawyer bug: middle drop made VoiceOver jump. Buffer keeps the oldest
+        // samples and reports overflow past the cap instead of dropping them.
         var ring = FloatRingBuffer()
         let sampleRate = 22050
         let maxCount = sampleRate * 120
 
         // Simulate piper delivering samples in chunks (like real delegate)
         let chunk = [Float](repeating: 0.5, count: 4096)
+        var totalDropped = 0
         for _ in 0..<700 { // 700*4096 ~ 2.8M > max
-            ring.appendAndEnforceMax(contentsOf: chunk, maxCount: maxCount)
+            totalDropped += ring.appendUpToMax(contentsOf: chunk, maxCount: maxCount)
         }
         XCTAssertEqual(ring.count, maxCount, "Buffer must be capped at 120s, not grow unbounded")
+        XCTAssertGreaterThan(totalDropped, 0, "Overflow past the cap must be reported, not silently absorbed")
         XCTAssertGreaterThan(ring.count, sampleRate * 5, "Must be larger than old 5s limit")
 
         // Simulate render consuming 1024 at a time – no middle hole

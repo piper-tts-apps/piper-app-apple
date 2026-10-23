@@ -39,23 +39,65 @@ final class FloatRingBufferTests: XCTestCase {
         XCTAssertEqual(sum, 60)
     }
 
-    func testAppendAndEnforceMaxArray() {
+    // MARK: - appendUpToMax: explicit truncation, oldest samples never dropped
+
+    func testAppendUpToMaxArrayKeepsOldest() {
         var ring = FloatRingBuffer()
-        ring.appendAndEnforceMax(contentsOf: [1, 2, 3, 4, 5], maxCount: 3)
+        let dropped = ring.appendUpToMax(contentsOf: [1, 2, 3, 4, 5], maxCount: 3)
+        XCTAssertEqual(dropped, 2, "Newest excess must be reported as dropped")
         XCTAssertEqual(ring.count, 3)
-        XCTAssertEqual(ring.snapshot, [3, 4, 5])
-        ring.appendAndEnforceMax(contentsOf: [6, 7], maxCount: 3)
-        XCTAssertEqual(ring.snapshot, [5, 6, 7])
+        XCTAssertEqual(ring.snapshot, [1, 2, 3], "Oldest samples must be preserved")
     }
 
-    func testAppendAndEnforceMaxBufferPointer() {
+    func testAppendUpToMaxArrayNoOverflow() {
+        var ring = FloatRingBuffer()
+        let dropped = ring.appendUpToMax(contentsOf: [1, 2, 3], maxCount: 3)
+        XCTAssertEqual(dropped, 0)
+        XCTAssertEqual(ring.snapshot, [1, 2, 3])
+    }
+
+    func testAppendUpToMaxArrayWhenFullDropsAllNew() {
+        var ring = FloatRingBuffer()
+        ring.append(contentsOf: [1, 2, 3])
+        let dropped = ring.appendUpToMax(contentsOf: [4, 5], maxCount: 3)
+        XCTAssertEqual(dropped, 2)
+        XCTAssertEqual(ring.snapshot, [1, 2, 3])
+    }
+
+    func testAppendUpToMaxBufferPointerKeepsOldest() {
         var ring = FloatRingBuffer()
         let src: [Float] = [10, 20, 30, 40]
+        var dropped = 0
         src.withUnsafeBufferPointer { buf in
-            ring.appendAndEnforceMax(contentsOf: buf, maxCount: 2)
+            dropped = ring.appendUpToMax(contentsOf: buf, maxCount: 2)
         }
+        XCTAssertEqual(dropped, 2)
         XCTAssertEqual(ring.count, 2)
-        XCTAssertEqual(ring.snapshot, [30, 40])
+        XCTAssertEqual(ring.snapshot, [10, 20])
+    }
+
+    func testAppendUpToMaxNeverExceedsCap() {
+        var ring = FloatRingBuffer()
+        let initial = (0..<800).map { Float($0) }
+        ring.append(contentsOf: initial)
+        let dropped = ring.appendUpToMax(contentsOf: [Float](repeating: 10000, count: 100), maxCount: 800)
+        XCTAssertEqual(dropped, 100)
+        XCTAssertEqual(ring.count, 800, "Buffer must stay capped")
+        let snap = ring.snapshot
+        XCTAssertEqual(snap.first, 0, "Oldest sample must be intact")
+        XCTAssertEqual(snap.last, 799)
+        XCTAssertFalse(snap.contains(10000), "Newest excess must not displace buffered audio")
+    }
+
+    func testAppendUpToMaxAt120sCap() {
+        var ring = FloatRingBuffer()
+        let maxCount = 22050 * 120
+        ring.append(contentsOf: [Float](repeating: 1.0, count: maxCount - 50))
+        let dropped = ring.appendUpToMax(contentsOf: [Float](repeating: 2.0, count: 100), maxCount: maxCount)
+        XCTAssertEqual(dropped, 50)
+        XCTAssertEqual(ring.count, maxCount)
+        XCTAssertTrue(ring.snapshot.suffix(50).allSatisfy { $0 == 2.0 })
+        XCTAssertEqual(ring.snapshot.first, 1.0, "Oldest samples must survive the cap")
     }
 
     func testCopyFirstIntoDestination() {
@@ -103,47 +145,5 @@ final class FloatRingBufferTests: XCTestCase {
         }
         XCTAssertEqual(ring.count, maxSamples)
         XCTAssertGreaterThan(ring.count, 110_250, "Must hold more than old 5s limit")
-    }
-
-    func testNoMiddleDrop() {
-        var ring = FloatRingBuffer()
-        // Fill with sequential values to detect middle drop
-        let initial = (0..<1000).map { Float($0) }
-        ring.append(contentsOf: initial)
-        XCTAssertEqual(ring.count, 1000)
-
-        // Enforce max 800 – should keep tail 200..999, not middle
-        ring.appendAndEnforceMax(contentsOf: [], maxCount: 800)
-        // appendAndEnforceMax with empty still enforces? Our impl only trims if count > max after append.
-        // So we need to trigger overflow via extra append
-        ring.appendAndEnforceMax(contentsOf: [Float](repeating: 9999, count: 0), maxCount: 800)
-        // Actually test proper overflow path
-        var ring2 = FloatRingBuffer()
-        ring2.append(contentsOf: initial)
-        ring2.appendAndEnforceMax(contentsOf: [Float](repeating: 10000, count: 100), maxCount: 800)
-        XCTAssertEqual(ring2.count, 800)
-        // Tail should be 10000s, head should be 300..999 (since 1000+100-800=300 overflow)
-        let snap = ring2.snapshot
-        XCTAssertEqual(snap.count, 800)
-        XCTAssertTrue(snap.suffix(100).allSatisfy { $0 == 10000 }, "Tail must be new samples")
-        // No middle hole – first element should be 300 (original 0..299 dropped)
-        XCTAssertEqual(snap.first, Float(300), "Should drop head, not middle")
-        // Sequential integrity for remaining original part
-        XCTAssertEqual(snap[0], Float(300))
-        XCTAssertEqual(snap[499], Float(799)) // 300 + 499 = 799
-    }
-
-    func testEnforceMaxKeepsTailNotHead() {
-        var ring = FloatRingBuffer()
-        let maxCount = 22050 * 120
-        ring.append(contentsOf: [Float](repeating: 1.0, count: maxCount - 50))
-        ring.appendAndEnforceMax(contentsOf: [Float](repeating: 2.0, count: 100), maxCount: maxCount)
-        XCTAssertEqual(ring.count, maxCount)
-        XCTAssertTrue(ring.snapshot.suffix(100).allSatisfy { $0 == 2.0 })
-        XCTAssertTrue(ring.snapshot.prefix(50).allSatisfy { $0 == 1.0 } == false || ring.snapshot.count == maxCount)
-        // After overflow of 50, first 50 of original should be gone
-        // Original had maxCount-50 of 1.0, we added 100 of 2.0 -> overflow 50
-        // So first element should still be 1.0 (since we dropped 50 from head, remaining head is still 1.0)
-        XCTAssertEqual(ring.snapshot.first, 1.0)
     }
 }
