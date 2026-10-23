@@ -48,22 +48,9 @@ extension FileManager {
         try fileManager.copyItem(at: paths.model, to: destination.model)
         try fileManager.markFileAsUnprotected(at: destination.model)
 
-        // Optional split voice parts (issue #94 streaming): when both are
-        // provided, they are stored next to the model under the fixed names
-        // libpiper derives from the model path. Best effort: without the
-        // parts the voice still works (threaded, unsplit), so a failed copy
-        // must not fail the install - but leave no half-installed pair.
+        // Optional split voice parts (issue #94 streaming)
         if let encoder, let decoder {
-            do {
-                try fileManager.copyItem(at: encoder, to: destination.encoder)
-                try fileManager.markFileAsUnprotected(at: destination.encoder)
-                try fileManager.copyItem(at: decoder, to: destination.decoder)
-                try fileManager.markFileAsUnprotected(at: destination.decoder)
-            } catch {
-                Log.error("Failed to install split model parts. Error: \(error)")
-                try? fileManager.removeItem(at: destination.encoder)
-                try? fileManager.removeItem(at: destination.decoder)
-            }
+            copySplitModelParts(encoder: encoder, decoder: decoder, to: destination)
         }
 
         if let info = paths.info, info.language.code.lowercased().hasPrefix("zh") {
@@ -84,6 +71,27 @@ extension FileManager {
         installedEntry.catalogKey = catalogKey
         installedModels.append(installedEntry)
         FileManager.ModelPaths.installedModels = installedModels
+    }
+
+    /// Stores split voice parts next to an installed model, under the
+    /// fixed names libpiper derives from the model path. Best effort with
+    /// no half-installed pair: without the parts the voice still works
+    /// (threaded, unsplit), so a failed copy must not fail the install -
+    /// on any failure both parts are removed again.
+    private func copySplitModelParts(encoder: URL,
+                                     decoder: URL,
+                                     to destination: ModelPaths) {
+        let fileManager = FileManager.default
+        do {
+            try fileManager.copyItem(at: encoder, to: destination.encoder)
+            try fileManager.markFileAsUnprotected(at: destination.encoder)
+            try fileManager.copyItem(at: decoder, to: destination.decoder)
+            try fileManager.markFileAsUnprotected(at: destination.decoder)
+        } catch {
+            Log.error("Failed to install split model parts. Error: \(error)")
+            try? fileManager.removeItem(at: destination.encoder)
+            try? fileManager.removeItem(at: destination.decoder)
+        }
     }
 
     func uninstall(paths: ModelPaths?) throws {
