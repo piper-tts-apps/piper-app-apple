@@ -115,4 +115,55 @@ final class FileManagerModelPathsTests: XCTestCase {
             XCTAssertNil(new)
         }
     }
+
+    func testSplitModelURLsDerivedFromModel() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let model = folder.appendingPathComponent("model.onnx")
+        let json = folder.appendingPathComponent("model.onnx.json")
+        let paths = FileManager.ModelPaths(model: model, json: json)!
+        XCTAssertEqual(paths.encoder.lastPathComponent, "model.encoder.onnx")
+        XCTAssertEqual(paths.decoder.lastPathComponent, "model.decoder.onnx")
+        XCTAssertEqual(paths.encoder.deletingLastPathComponent().standardizedFileURL.path,
+                       folder.standardizedFileURL.path)
+        XCTAssertEqual(paths.decoder.deletingLastPathComponent().standardizedFileURL.path,
+                       folder.standardizedFileURL.path)
+    }
+
+    func testHasSplitModelRequiresBothParts() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = folder.appendingPathComponent("model.onnx")
+        let json = folder.appendingPathComponent("model.onnx.json")
+        let paths = FileManager.ModelPaths(model: model, json: json)!
+        XCTAssertFalse(paths.hasSplitModel)
+        try Data("encoder".utf8).write(to: paths.encoder)
+        XCTAssertFalse(paths.hasSplitModel)
+        try Data("decoder".utf8).write(to: paths.decoder)
+        XCTAssertTrue(paths.hasSplitModel)
+    }
+
+    func testSplitModelFilesClassification() {
+        let model = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.onnx")
+        let encoder = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.encoder.onnx")
+        let decoder = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.decoder.onnx")
+        let split = FileManager.ModelPaths.splitModelFiles(forModel: model,
+                                                           among: [decoder, model, encoder])
+        XCTAssertEqual(split?.encoder, encoder)
+        XCTAssertEqual(split?.decoder, decoder)
+    }
+
+    func testSplitModelFilesRequiresBothParts() {
+        let model = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.onnx")
+        let encoder = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.encoder.onnx")
+        XCTAssertNil(FileManager.ModelPaths.splitModelFiles(forModel: model, among: [model, encoder]))
+    }
+
+    func testSplitModelFilesRejectsPartsOfAnotherModel() {
+        let model = URL(fileURLWithPath: "/tmp/voice/en_US-lessac-medium.onnx")
+        let otherEncoder = URL(fileURLWithPath: "/tmp/voice/de_DE-thorsten-high.encoder.onnx")
+        let otherDecoder = URL(fileURLWithPath: "/tmp/voice/de_DE-thorsten-high.decoder.onnx")
+        XCTAssertNil(FileManager.ModelPaths.splitModelFiles(forModel: model,
+                                                            among: [model, otherEncoder, otherDecoder]))
+    }
 }

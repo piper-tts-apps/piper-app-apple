@@ -61,10 +61,11 @@ struct ImportVoiceHostModelView: View {
                                      isSelected: !hostModel.viewModel.selectedModel.isEmpty)
                             .fileImporter(isPresented: $isShowingModelFileSelector,
                                           allowedContentTypes: [Constants.modelUTI],
+                                          allowsMultipleSelection: true,
                                           onCompletion: { results in
                                 switch results {
-                                case .success(let fileURL):
-                                    hostModel.select(model: fileURL)
+                                case .success(let fileURLs):
+                                    hostModel.select(modelFiles: fileURLs)
                                 case .failure(let error):
                                     Log.error("Failed to import model file: \(error)")
                                 }

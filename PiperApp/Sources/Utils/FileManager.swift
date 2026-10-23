@@ -11,7 +11,10 @@ extension FileManager {
         case cantParseModelInfo
     }
 
-    func install(paths: ModelPaths?, catalogKey: String? = nil) throws {
+    func install(paths: ModelPaths?,
+                 catalogKey: String? = nil,
+                 encoder: URL? = nil,
+                 decoder: URL? = nil) throws {
         guard let paths else {
             throw InstallError.invalidSourceFiles
         }
@@ -44,6 +47,24 @@ extension FileManager {
         try fileManager.markFileAsUnprotected(at: destination.json)
         try fileManager.copyItem(at: paths.model, to: destination.model)
         try fileManager.markFileAsUnprotected(at: destination.model)
+
+        // Optional split voice parts (issue #94 streaming): when both are
+        // provided, they are stored next to the model under the fixed names
+        // libpiper derives from the model path. Best effort: without the
+        // parts the voice still works (threaded, unsplit), so a failed copy
+        // must not fail the install - but leave no half-installed pair.
+        if let encoder, let decoder {
+            do {
+                try fileManager.copyItem(at: encoder, to: destination.encoder)
+                try fileManager.markFileAsUnprotected(at: destination.encoder)
+                try fileManager.copyItem(at: decoder, to: destination.decoder)
+                try fileManager.markFileAsUnprotected(at: destination.decoder)
+            } catch {
+                Log.error("Failed to install split model parts. Error: \(error)")
+                try? fileManager.removeItem(at: destination.encoder)
+                try? fileManager.removeItem(at: destination.decoder)
+            }
+        }
 
         if let info = paths.info, info.language.code.lowercased().hasPrefix("zh") {
             if let g2pwFolder = FileManager.Constants.g2pwFolderURL,
@@ -79,6 +100,11 @@ extension FileManager {
         let fileManager = FileManager.default
         try fileManager.removeItem(at: installed.model)
         try fileManager.removeItem(at: installed.json)
+        // Split voice parts live next to the model under fixed names; the
+        // folder removal below covers them for folder-backed installs, but
+        // remove them explicitly so no pair survives a folder-less path.
+        try? fileManager.removeItem(at: installed.encoder)
+        try? fileManager.removeItem(at: installed.decoder)
 
         if let modelFolder = installed.modelFolder {
             try fileManager.removeItem(at: modelFolder)

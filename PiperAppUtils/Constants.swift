@@ -16,6 +16,14 @@ public enum Constants {
     public static var modelJSONFileNameWithExtension: String {
         return "\(modelFileNameWithExtension).\(jsonModelExtension)"
     }
+    // Split voice parts for streaming (issue #94): libpiper derives these
+    // names from the model file name (<stem>.encoder.onnx / .decoder.onnx).
+    public static var modelEncoderFileNameWithExtension: String {
+        return "\(modelFileName).encoder.\(modelExtensiom)"
+    }
+    public static var modelDecoderFileNameWithExtension: String {
+        return "\(modelFileName).decoder.\(modelExtensiom)"
+    }
 
     public static var modelsJSONFileName: String {
         return "\(modelsFolderName).\(jsonModelExtension)"

@@ -38,6 +38,25 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
         }
     }
 
+    func select(modelFiles urls: [URL]) {
+        // The model picker allows multiple selection so a split voice can
+        // be imported in one go: the model file plus, optionally, its
+        // <name>.encoder.onnx / <name>.decoder.onnx parts.
+        let model = urls.first { url in
+            !url.lastPathComponent.hasSuffix(".encoder.onnx") &&
+                !url.lastPathComponent.hasSuffix(".decoder.onnx")
+        }
+        select(model: model)
+        if let model,
+           let split = FileManager.ModelPaths.splitModelFiles(forModel: model, among: urls) {
+            viewModel.selectedEncoderURL = split.encoder
+            viewModel.selectedDecoderURL = split.decoder
+        } else {
+            viewModel.selectedEncoderURL = nil
+            viewModel.selectedDecoderURL = nil
+        }
+    }
+
     func select(json: URL?) {
         guard let json else {
             Log.error("Failed to find json file")
@@ -79,10 +98,15 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
             return
         }
 
+        let selectedEncoder = viewModel.selectedEncoderURL
+        let selectedDecoder = viewModel.selectedDecoderURL
+
         Task { [weak self] in
             defer {
                 paths.model.stopAccessingSecurityScopedResource()
                 paths.json.stopAccessingSecurityScopedResource()
+                selectedEncoder?.stopAccessingSecurityScopedResource()
+                selectedDecoder?.stopAccessingSecurityScopedResource()
             }
 
             if paths.model.startAccessingSecurityScopedResource() != true {
@@ -95,6 +119,19 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
                 return
             }
 
+            // Split parts are optional: pass them on only when both were
+            // selected with the model and can actually be read.
+            var splitEncoder: URL?
+            var splitDecoder: URL?
+            if let selectedEncoder, let selectedDecoder,
+               selectedEncoder.startAccessingSecurityScopedResource(),
+               selectedDecoder.startAccessingSecurityScopedResource(),
+               FileManager.default.fileExists(atPath: selectedEncoder.path),
+               FileManager.default.fileExists(atPath: selectedDecoder.path) {
+                splitEncoder = selectedEncoder
+                splitDecoder = selectedDecoder
+            }
+
             if (try? ModelInfo.create(from: paths.json)) == nil {
                 Log.error("Failed to create ModelInfo from modelJSON")
                 return
@@ -104,7 +141,9 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
                 return
             }
 
-            await self.piper.install(paths: paths)
+            await self.piper.install(paths: paths,
+                                     encoder: splitEncoder,
+                                     decoder: splitDecoder)
             self.delegate?.modelDidChange()
             await MainActor.run { [weak self] in
                 self?.viewModel.onDismiss?()

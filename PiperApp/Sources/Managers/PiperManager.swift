@@ -85,10 +85,16 @@ class PiperManager {
         try await audioUnit.save(text: text, piperVoiceId: piperVoiceId, to: file)
     }
     
-    func install(paths: FileManager.ModelPaths?, catalogKey: String? = nil) async {
+    func install(paths: FileManager.ModelPaths?,
+                 catalogKey: String? = nil,
+                 encoder: URL? = nil,
+                 decoder: URL? = nil) async {
         do {
             await audioUnit.disconnect()
-            try FileManager.default.install(paths: paths, catalogKey: catalogKey)
+            try FileManager.default.install(paths: paths,
+                                            catalogKey: catalogKey,
+                                            encoder: encoder,
+                                            decoder: decoder)
             AVSpeechSynthesisProviderVoice.updateSpeechVoices()
             await audioUnit.connect()
         } catch {

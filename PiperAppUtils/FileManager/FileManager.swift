@@ -22,6 +22,46 @@ extension FileManager {
             self.info = try? ModelInfo.create(from: json)
         }
 
+        /// Location of the encoder part of a split voice, derived from the
+        /// model URL using the fixed storage file name libpiper expects
+        /// next to the model (see Constants).
+        public var encoder: URL {
+            return model.deletingLastPathComponent()
+                .appendingPathComponent(PiperAppUtils.Constants.modelEncoderFileNameWithExtension)
+        }
+
+        /// Location of the decoder part of a split voice (see `encoder`).
+        public var decoder: URL {
+            return model.deletingLastPathComponent()
+                .appendingPathComponent(PiperAppUtils.Constants.modelDecoderFileNameWithExtension)
+        }
+
+        /// Whether both split voice parts are present next to the model.
+        /// libpiper only streams when both exist; with neither (or only
+        /// one) the voice is synthesized from the full model as before.
+        public var hasSplitModel: Bool {
+            return FileManager.default.fileExists(atPath: encoder.path) &&
+                FileManager.default.fileExists(atPath: decoder.path)
+        }
+
+        /// Finds the split voice parts for a model file among files the
+        /// user selected together with it in the import flow. The parts of
+        /// `<name>.onnx` are `<name>.encoder.onnx` and `<name>.decoder.onnx`;
+        /// both must be present and belong to the model.
+        public static func splitModelFiles(
+            forModel model: URL,
+            among urls: [URL]
+        ) -> (encoder: URL, decoder: URL)? {
+            let baseName = model.deletingPathExtension().lastPathComponent
+            let encoderName = "\(baseName).encoder.\(PiperAppUtils.Constants.modelExtensiom)"
+            let decoderName = "\(baseName).decoder.\(PiperAppUtils.Constants.modelExtensiom)"
+            guard let encoder = urls.first(where: { $0.lastPathComponent == encoderName }),
+                  let decoder = urls.first(where: { $0.lastPathComponent == decoderName }) else {
+                return nil
+            }
+            return (encoder, decoder)
+        }
+
         public var exist: Bool {
             return FileManager.default.fileExists(atPath: model.path) &&
             FileManager.default.fileExists(atPath: json.path)

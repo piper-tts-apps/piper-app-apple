@@ -20,6 +20,10 @@ struct ImportVoiceViewModel {
 
     var selectedModelURL: URL?
     var selectedJSONURL: URL?
+    // Optional split voice parts selected together with the model
+    // (<name>.encoder.onnx / <name>.decoder.onnx); both or neither.
+    var selectedEncoderURL: URL?
+    var selectedDecoderURL: URL?
     var onDismiss: (() -> Void)?
     var error: Error?
     var showErrorMessage: Bool = false
