@@ -6,10 +6,17 @@ import PiperAppUtils
 
 struct ImportVoiceViewModel {
     var selectedModel: String {
-        guard let selectedModelURL else {
-            return ""
+        if let selectedModelURL {
+            return selectedModelURL.lastPathComponent
         }
-        return selectedModelURL.lastPathComponent
+        // Splits-only selection (issue #94): there is no model file to
+        // name, so the encoder part stands in for the voice in the
+        // model slot - the row (and the Install button's enabled state,
+        // which keys off this text) stays truthful without new strings.
+        if let selectedEncoderURL {
+            return selectedEncoderURL.lastPathComponent
+        }
+        return ""
     }
     var selectedJSON: String {
         guard let selectedJSONURL else {
@@ -20,8 +27,9 @@ struct ImportVoiceViewModel {
 
     var selectedModelURL: URL?
     var selectedJSONURL: URL?
-    // Optional split voice parts selected together with the model
-    // (<name>.encoder.onnx / <name>.decoder.onnx); both or neither.
+    // Split voice parts (<name>.encoder.onnx / <name>.decoder.onnx),
+    // selected together with the model or, for a splits-only voice,
+    // without one; both or neither.
     var selectedEncoderURL: URL?
     var selectedDecoderURL: URL?
     var onDismiss: (() -> Void)?

@@ -73,6 +73,11 @@ extension FileManager {
         /// voice: the model is the `.onnx` file that is not a split part,
         /// the json is the `.json` file, and the split parts are matched
         /// to the model with the same rules as `splitModelFiles`.
+        /// A splits-only selection (issue #94) has no model file: then
+        /// the split parts are matched against each other - an encoder
+        /// and a decoder sharing the same base name - and the model
+        /// stays nil. A lone part (no sibling with the same base) is an
+        /// incomplete selection and classifies as no parts at all.
         /// Files that are none of these (e.g. a readme) are ignored, and
         /// when several models are present the first one wins and only
         /// its own parts are returned.
@@ -91,6 +96,16 @@ extension FileManager {
             if let model, let split = splitModelFiles(forModel: model, among: urls) {
                 encoder = split.encoder
                 decoder = split.decoder
+            } else if model == nil {
+                let encoderSuffix = ".encoder.\(modelExtension)"
+                if let candidate = urls.first(where: { $0.lastPathComponent.hasSuffix(encoderSuffix) }) {
+                    let baseName = String(candidate.lastPathComponent.dropLast(encoderSuffix.count))
+                    let decoderName = "\(baseName).decoder.\(modelExtension)"
+                    if let pair = urls.first(where: { $0.lastPathComponent == decoderName }) {
+                        encoder = candidate
+                        decoder = pair
+                    }
+                }
             }
             return ImportedModelFiles(model: model, json: json, encoder: encoder, decoder: decoder)
         }

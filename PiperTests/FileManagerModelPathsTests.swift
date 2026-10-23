@@ -288,6 +288,43 @@ final class FileManagerModelPathsTests: XCTestCase {
         XCTAssertTrue(decoded.exist)
     }
 
+    func testImportedModelFilesSplitsOnlySelection() {
+        // 3 files: encoder + decoder + json, no full model (issue #94).
+        let urls = [lessacJSON, lessacEncoder, lessacDecoder]
+        let result = FileManager.ModelPaths.importedModelFiles(among: urls)
+        XCTAssertNil(result.model)
+        XCTAssertEqual(result.json, lessacJSON)
+        XCTAssertEqual(result.encoder, lessacEncoder)
+        XCTAssertEqual(result.decoder, lessacDecoder)
+    }
+
+    func testImportedModelFilesSplitsOnlyWithoutJSON() {
+        let urls = [lessacEncoder, lessacDecoder]
+        let result = FileManager.ModelPaths.importedModelFiles(among: urls)
+        XCTAssertNil(result.model)
+        XCTAssertNil(result.json)
+        XCTAssertEqual(result.encoder, lessacEncoder)
+        XCTAssertEqual(result.decoder, lessacDecoder)
+    }
+
+    func testImportedModelFilesEncoderWithoutDecoderIsIncomplete() {
+        let urls = [lessacJSON, lessacEncoder]
+        let result = FileManager.ModelPaths.importedModelFiles(among: urls)
+        XCTAssertNil(result.model)
+        XCTAssertEqual(result.json, lessacJSON)
+        XCTAssertNil(result.encoder)
+        XCTAssertNil(result.decoder)
+    }
+
+    func testImportedModelFilesMismatchedSplitPairIsIncomplete() {
+        let otherDecoder = URL(fileURLWithPath: "/tmp/voice/en_US-amy-medium.decoder.onnx")
+        let urls = [lessacJSON, lessacEncoder, otherDecoder]
+        let result = FileManager.ModelPaths.importedModelFiles(among: urls)
+        XCTAssertNil(result.model)
+        XCTAssertNil(result.encoder)
+        XCTAssertNil(result.decoder)
+    }
+
     func testImportedModelFilesEmptySelection() {
         let imported = FileManager.ModelPaths.importedModelFiles(among: [])
         XCTAssertNil(imported.model)

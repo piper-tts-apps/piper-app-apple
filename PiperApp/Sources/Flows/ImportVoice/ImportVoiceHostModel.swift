@@ -52,6 +52,13 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
             // previous selection, clearing them when it brings none.
             viewModel.selectedEncoderURL = imported.encoder
             viewModel.selectedDecoderURL = imported.decoder
+        } else if imported.encoder != nil {
+            // Splits-only selection (issue #94): no full model was
+            // picked. The model slot stays empty (the install derives
+            // its anchor from the encoder) and the parts are the voice.
+            viewModel.selectedModelURL = nil
+            viewModel.selectedEncoderURL = imported.encoder
+            viewModel.selectedDecoderURL = imported.decoder
         }
         if imported.json != nil {
             select(json: imported.json)
@@ -93,7 +100,15 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
     }
 
     func install() {
-        guard let paths = FileManager.ModelPaths(model: viewModel.selectedModelURL,
+        let selectedModel = viewModel.selectedModelURL
+        // Splits-only (issue #94): no model file was selected. The
+        // anchor libpiper derives the split paths from is the parts'
+        // sibling <base>.onnx, which does not exist as a file.
+        let anchor = selectedModel ?? viewModel.selectedEncoderURL.map { encoder in
+            encoder.deletingPathExtension().deletingPathExtension()
+                .appendingPathExtension(PiperAppUtils.Constants.modelExtensiom)
+        }
+        guard let paths = FileManager.ModelPaths(model: anchor,
                                                  json: viewModel.selectedJSONURL) else {
             Log.error("Failed to find model or model JSON file")
             return
@@ -110,7 +125,10 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
                 selectedDecoder?.stopAccessingSecurityScopedResource()
             }
 
-            if paths.model.startAccessingSecurityScopedResource() != true {
+            // Only a real model file needs (and can get) scoped
+            // access; the splits-only anchor is a path, not a file.
+            if selectedModel != nil,
+               paths.model.startAccessingSecurityScopedResource() != true {
                 Log.error("Failed to access model")
                 return
             }
@@ -120,8 +138,9 @@ class ImportVoiceHostModel: @unchecked Sendable, ObservableObject {
                 return
             }
 
-            // Split parts are optional: pass them on only when both were
-            // selected with the model and can actually be read.
+            // Split parts are optional next to a full model (and
+            // required without one): pass them on only when both were
+            // selected and can actually be read.
             var splitEncoder: URL?
             var splitDecoder: URL?
             if let selectedEncoder, let selectedDecoder,
