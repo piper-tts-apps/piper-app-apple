@@ -25,6 +25,9 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     private let requestGate = RequestGenerationGate()
     /// Generation of the request currently being synthesized. Guarded by outputDataLock.
     private var activeGeneration: UInt64 = 0
+#if DEBUG
+    private let requestTracer = AURequestTracer()
+#endif
 
     private let outputRecurseCallNumberMax: UInt32 = 400
     private let baseDelayMicroseconds: UInt32 = 5000
@@ -56,6 +59,9 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         os_unfair_lock_unlock(&outputDataLock)
         piper = nil
         model = nil
+#if DEBUG
+        requestTracer.end()
+#endif
     }
 
     // MARK: - Rendering
@@ -178,6 +184,9 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         self.request = speechRequest
         self.activeGeneration = generation
         os_unfair_lock_unlock(&outputDataLock)
+#if DEBUG
+        requestTracer.begin(generation: generation, textLength: speechRequest.ssmlRepresentation.count)
+#endif
         createPiperIfNeeded(voiceIdentifier: speechRequest.voice.identifier)
         piper?.synthesizeSSML(speechRequest.ssmlRepresentation,
                               speakerId: speakerId)
@@ -185,11 +194,17 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
 
     public override func cancelSpeechRequest() {
         Log.debug("cancelSpeechRequest")
+#if DEBUG
+        requestTracer.cancel()
+#endif
         cleanUp()
     }
 
     func cleanUp() {
         Log.debug("cleanUp request:\(self.request?.ssmlRepresentation ?? "nil")")
+#if DEBUG
+        requestTracer.end()
+#endif
         removeRequestAndCleanOutputData()
     }
 
@@ -292,35 +307,51 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
 extension PiperTTSAudioUnit: PiperDelegate {
     public func piperDidReceiveSamples(_ samples: UnsafePointer<Float>, withSize size: Int) {
         if size == 0 { return }
-        // Stamp the chunk with the generation of the request active on arrival.
-        // The append below validates this stamp, never the mutable
-        // activeGeneration read at append time: after a cancel and a new
-        // request, the slot already holds the new generation, so slot
-        // validation would rubber-stamp a stale chunk from the cancelled
-        // request (issue #94, bug 2). Work between arrival and append - the
-        // resampler runs outside the lock - can span the whole cancel/begin
-        // boundary; the stamp is what rejects the chunk when it lands.
+        // Stamp the chunk with the generation of the request active on
+        // arrival; the append validates the stamp, never the mutable
+        // activeGeneration (after cancel + new request it holds the new
+        // generation and would rubber-stamp stale chunks - bug 2). The
+        // resampler runs outside the lock, across the cancel boundary.
         os_unfair_lock_lock(&outputDataLock)
         let producingGeneration = activeGeneration
         let hasActiveRequest = request != nil
         os_unfair_lock_unlock(&outputDataLock)
-        guard hasActiveRequest, requestGate.isCurrent(producingGeneration) else { return }
+        guard hasActiveRequest, requestGate.isCurrent(producingGeneration) else {
+#if DEBUG
+            requestTracer.chunkDroppedEarly(stampedGeneration: producingGeneration, samples: size)
+#endif
+            return
+        }
 
         let buf = UnsafeBufferPointer(start: samples, count: size)
         if let modelFormat = model?.audioFormat,
            modelFormat.sampleRate != format.sampleRate {
             let resampled = AudioResampler.resampleBuffer(buf, inputRate: modelFormat.sampleRate, outputRate: format.sampleRate)
             os_unfair_lock_lock(&outputDataLock)
-            if requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration) {
+            let accepted = requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration)
+            if accepted {
                 outputData.appendAndEnforceMax(contentsOf: resampled, maxCount: maxSamplesCount)
             }
+#if DEBUG
+            let slotAtAppend = activeGeneration
+#endif
             os_unfair_lock_unlock(&outputDataLock)
+#if DEBUG
+            requestTracer.chunk(stampedGeneration: producingGeneration, samples: resampled.count, accepted: accepted, activeGeneration: slotAtAppend)
+#endif
         } else {
             os_unfair_lock_lock(&outputDataLock)
-            if requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration) {
+            let accepted = requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration)
+            if accepted {
                 outputData.appendAndEnforceMax(contentsOf: buf, maxCount: maxSamplesCount)
             }
+#if DEBUG
+            let slotAtAppend = activeGeneration
+#endif
             os_unfair_lock_unlock(&outputDataLock)
+#if DEBUG
+            requestTracer.chunk(stampedGeneration: producingGeneration, samples: size, accepted: accepted, activeGeneration: slotAtAppend)
+#endif
         }
     }
 
