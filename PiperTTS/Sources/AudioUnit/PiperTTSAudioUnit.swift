@@ -57,14 +57,14 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
 
     public override func deallocateRenderResources() {
         super.deallocateRenderResources()
-        os_unfair_lock_lock(&outputDataLock)
-        outputData.clear()
-        os_unfair_lock_unlock(&outputDataLock)
-        piper = nil
-        model = nil
 #if DEBUG
         requestTracer.deallocated()
 #endif
+        // Cancel the live synthesis before teardown, in cleanUp()'s order -
+        // clearing alone orphaned the self-retained synthesis operation.
+        removeRequestAndCleanOutputData()
+        piper = nil
+        model = nil
     }
 
     // MARK: - Rendering
