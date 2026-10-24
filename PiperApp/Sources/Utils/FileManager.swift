@@ -11,7 +11,10 @@ extension FileManager {
         case cantParseModelInfo
     }
 
-    func install(paths: ModelPaths?, catalogKey: String? = nil) throws {
+    func install(paths: ModelPaths?,
+                 catalogKey: String? = nil,
+                 encoder: URL? = nil,
+                 decoder: URL? = nil) throws {
         guard let paths else {
             throw InstallError.invalidSourceFiles
         }
@@ -42,8 +45,7 @@ extension FileManager {
         try fileManager.createModelPathsFolder(paths: destination)
         try fileManager.copyItem(at: paths.json, to: destination.json)
         try fileManager.markFileAsUnprotected(at: destination.json)
-        try fileManager.copyItem(at: paths.model, to: destination.model)
-        try fileManager.markFileAsUnprotected(at: destination.model)
+        try copyModelFiles(paths: paths, encoder: encoder, decoder: decoder, to: destination)
 
         if let info = paths.info, info.language.code.lowercased().hasPrefix("zh") {
             if let g2pwFolder = FileManager.Constants.g2pwFolderURL,
@@ -65,6 +67,63 @@ extension FileManager {
         FileManager.ModelPaths.installedModels = installedModels
     }
 
+    /// Copies the model side of an install: the full model when the
+    /// source has one (with the split parts as a best-effort extra -
+    /// without them the voice still works, threaded and unsplit), or,
+    /// for splits-only voices (issue #94), just the split parts and
+    /// strictly: the destination model URL stays an anchor that
+    /// libpiper derives the split paths from, and the parts ARE the
+    /// voice, so their copy must not fail silently.
+    private func copyModelFiles(paths: ModelPaths,
+                                encoder: URL?,
+                                decoder: URL?,
+                                to destination: ModelPaths) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: paths.model.path) {
+            try fileManager.copyItem(at: paths.model, to: destination.model)
+            try fileManager.markFileAsUnprotected(at: destination.model)
+            if let encoder, let decoder {
+                copySplitModelParts(encoder: encoder, decoder: decoder, to: destination)
+            }
+        } else if let encoder, let decoder {
+            try copySplitModelPartsStrict(encoder: encoder, decoder: decoder, to: destination)
+        } else {
+            throw InstallError.invalidSourceFiles
+        }
+    }
+
+    /// Stores split voice parts next to a destination model, under the
+    /// fixed names libpiper derives from the model path. On any failure
+    /// both parts are removed again, so no half pair is left behind.
+    private func copySplitModelPartsStrict(encoder: URL,
+                                           decoder: URL,
+                                           to destination: ModelPaths) throws {
+        let fileManager = FileManager.default
+        do {
+            try fileManager.copyItem(at: encoder, to: destination.encoder)
+            try fileManager.markFileAsUnprotected(at: destination.encoder)
+            try fileManager.copyItem(at: decoder, to: destination.decoder)
+            try fileManager.markFileAsUnprotected(at: destination.decoder)
+        } catch {
+            try? fileManager.removeItem(at: destination.encoder)
+            try? fileManager.removeItem(at: destination.decoder)
+            throw error
+        }
+    }
+
+    /// Best-effort variant for voices that also have the full model: the
+    /// voice still works (threaded, unsplit) without the parts, so a
+    /// failed copy must not fail the install.
+    private func copySplitModelParts(encoder: URL,
+                                     decoder: URL,
+                                     to destination: ModelPaths) {
+        do {
+            try copySplitModelPartsStrict(encoder: encoder, decoder: decoder, to: destination)
+        } catch {
+            Log.error("Failed to install split model parts. Error: \(error)")
+        }
+    }
+
     func uninstall(paths: ModelPaths?) throws {
 
         guard let installed = paths else {
@@ -77,8 +136,15 @@ extension FileManager {
         })
         FileManager.ModelPaths.installedModels = installedModels
         let fileManager = FileManager.default
-        try fileManager.removeItem(at: installed.model)
+        // A splits-only voice has no file behind its model anchor, so
+        // removing it must not throw and skip the json/folder cleanup.
+        try? fileManager.removeItem(at: installed.model)
         try fileManager.removeItem(at: installed.json)
+        // Split voice parts live next to the model under fixed names; the
+        // folder removal below covers them for folder-backed installs, but
+        // remove them explicitly so no pair survives a folder-less path.
+        try? fileManager.removeItem(at: installed.encoder)
+        try? fileManager.removeItem(at: installed.decoder)
 
         if let modelFolder = installed.modelFolder {
             try fileManager.removeItem(at: modelFolder)

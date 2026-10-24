@@ -8,6 +8,7 @@ struct SettingsView: View {
 
     @StateObject var hostModel: SettingsHostModel
     @AppStorage(ModelFormat.userDefaultsKey) private var modelFormat: ModelFormat = .standard
+    @AppStorage(StreamingVoices.userDefaultsKey) private var streamingVoices: Bool = true
 
 #if os(iOS)
     private let platform = "iOS"
@@ -26,8 +27,12 @@ struct SettingsView: View {
                         Text("model_format_compact").tag(ModelFormat.compact)
                     }
                     .pickerStyle(.menu)
+                    Toggle("streaming_voices", isOn: $streamingVoices)
                 } footer: {
-                    Text("model_format_description")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("model_format_description")
+                        Text("streaming_voices_description")
+                    }
                 }
 
                 Section {

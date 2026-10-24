@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/piper-tts-apps/piper-objc",
       "state" : {
-        "revision" : "b46bb4fb5caca8f9b0f2129d94e1bc85e7cf7ec6",
-        "version" : "0.2.48"
+        "revision" : "b185623ab17481c88c73c09ef386b695e903b0a6",
+        "version" : "0.2.49"
       }
     },
     {
@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/piper-tts-apps/piper1-gpl-spm.git",
       "state" : {
-        "revision" : "efb938712edddeb8d4c157fc428aa3b182c53388",
-        "version" : "0.1.21"
+        "revision" : "a3da5abfd12d4057a96f031195297bae475174a0",
+        "version" : "0.1.23"
       }
     },
     {

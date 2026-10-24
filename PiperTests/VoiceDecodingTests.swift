@@ -136,6 +136,76 @@ final class VoiceDecodingTests: XCTestCase {
         XCTAssertEqual(legacy.hashValue, withVariant.hashValue)
     }
 
+    /// Entry with a split (encoder/decoder) build in the top-level
+    /// `split` field (issue #94), as a future catalog would write it.
+    /// The `files` dict keeps the full model and the config only - the
+    /// parts must not appear there.
+    private var splitJSON: Data {
+        // swiftlint:disable:next non_optional_string_data_conversion
+        """
+        {
+          "key":"de_DE-thorsten-medium",
+          "name":"thorsten",
+          "quality":"medium",
+          "language":{"code":"de_DE","family":"de","region":"DE"},
+          "files":{
+            "de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx":{"size_bytes":31951473,"md5_digest":"bfab926dffc60c6006a92d8681046485"},
+            "de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json":{"size_bytes":4875,"md5_digest":"e39d926dffc60c6006a92d8681046485"}
+          },
+          "split":{
+            "encoder":{"model":"de/de_DE/thorsten/medium/de_DE-thorsten-medium.encoder.onnx","size_bytes":15000000,"md5_digest":"aaaa926dffc60c6006a92d8681046485"},
+            "decoder":{"model":"de/de_DE/thorsten/medium/de_DE-thorsten-medium.decoder.onnx","size_bytes":16956298,"md5_digest":"bbbb926dffc60c6006a92d8681046485"}
+          }
+        }
+        """.data(using: .utf8)!
+    }
+
+    func testDecodingSplitEntry() throws {
+        let voice = try JSONDecoder().decode(Voice.self, from: splitJSON)
+        XCTAssertEqual(voice.split?.encoder.model,
+                       "de/de_DE/thorsten/medium/de_DE-thorsten-medium.encoder.onnx")
+        XCTAssertEqual(voice.split?.encoder.sizeBytes, 15000000)
+        XCTAssertEqual(voice.split?.encoder.md5Digest, "aaaa926dffc60c6006a92d8681046485")
+        XCTAssertEqual(voice.split?.decoder.model,
+                       "de/de_DE/thorsten/medium/de_DE-thorsten-medium.decoder.onnx")
+        XCTAssertEqual(voice.split?.decoder.sizeBytes, 16956298)
+        XCTAssertEqual(voice.split?.decoder.md5Digest, "bbbb926dffc60c6006a92d8681046485")
+    }
+
+    func testDecodingWithoutSplit() throws {
+        let voice = try JSONDecoder().decode(Voice.self, from: legacyJSON)
+        XCTAssertNil(voice.split)
+    }
+
+    func testSplitEntryModelPathStaysTheFullModel() throws {
+        // modelPath is the anchor/directory source for split voices,
+        // not a download target: it keeps resolving to the files model
+        // entry the parts live next to.
+        let voice = try JSONDecoder().decode(Voice.self, from: splitJSON)
+        XCTAssertEqual(voice.modelPath, "de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx")
+        XCTAssertEqual(voice.jsonPath, "de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json")
+    }
+
+    func testSplitEntryVoiceSizeIsPairPlusConfig() throws {
+        let voice = try JSONDecoder().decode(Voice.self, from: splitJSON)
+        XCTAssertEqual(voice.voiceSize, 15000000 + 16956298 + 4875)
+    }
+
+    func testClassicEntryVoiceSizeSumsFiles() throws {
+        let voice = try JSONDecoder().decode(Voice.self, from: legacyJSON)
+        XCTAssertEqual(voice.voiceSize, 31951473)
+    }
+
+    func testEqualityIgnoresSplit() throws {
+        let withSplit = try JSONDecoder().decode(Voice.self, from: splitJSON)
+        var dict = try XCTUnwrap(JSONSerialization.jsonObject(with: splitJSON) as? [String: Any])
+        dict["split"] = nil
+        let withoutSplit = try JSONDecoder().decode(
+            Voice.self, from: JSONSerialization.data(withJSONObject: dict))
+        XCTAssertEqual(withSplit, withoutSplit)
+        XCTAssertEqual(withSplit.hashValue, withoutSplit.hashValue)
+    }
+
     func testEqualityIgnoresLicenseFields() throws {
         // Production safety: Voice equality/hash feed installed-voice matching
         // and must stay on the original fields only, so the same voice decoded

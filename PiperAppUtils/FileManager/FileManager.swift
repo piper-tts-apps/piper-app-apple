@@ -5,6 +5,10 @@ import Foundation
 
 extension FileManager {
     public struct ModelPaths {
+        /// The anchor path handed to piper_create: libpiper derives the
+        /// split voice paths (<stem>.encoder.onnx / <stem>.decoder.onnx)
+        /// from it. For a splits-only voice the file itself is absent -
+        /// only the two split parts and the json exist on disk.
         public let model: URL
         public let json: URL
         public let info: ModelInfo?
@@ -22,9 +26,98 @@ extension FileManager {
             self.info = try? ModelInfo.create(from: json)
         }
 
+        /// Location of the encoder part of a split voice, derived from the
+        /// model URL using the fixed storage file name libpiper expects
+        /// next to the model (see Constants). Installed voices always use
+        /// these fixed storage names inside one voice folder, so no
+        /// separate stored split URLs are needed: deriving from the
+        /// anchor covers classic, full+split, and splits-only layouts.
+        public var encoder: URL {
+            return model.deletingLastPathComponent()
+                .appendingPathComponent(PiperAppUtils.Constants.modelEncoderFileNameWithExtension)
+        }
+
+        /// Location of the decoder part of a split voice (see `encoder`).
+        public var decoder: URL {
+            return model.deletingLastPathComponent()
+                .appendingPathComponent(PiperAppUtils.Constants.modelDecoderFileNameWithExtension)
+        }
+
+        /// Whether both split voice parts are present next to the model.
+        /// libpiper only streams when both exist; with neither (or only
+        /// one) the voice is synthesized from the full model as before.
+        public var hasSplitModel: Bool {
+            return FileManager.default.fileExists(atPath: encoder.path) &&
+                FileManager.default.fileExists(atPath: decoder.path)
+        }
+
+        /// Finds the split voice parts for a model file among files the
+        /// user selected together with it in the import flow. The parts of
+        /// `<name>.onnx` are `<name>.encoder.onnx` and `<name>.decoder.onnx`;
+        /// both must be present and belong to the model.
+        public static func splitModelFiles(
+            forModel model: URL,
+            among urls: [URL]
+        ) -> (encoder: URL, decoder: URL)? {
+            let baseName = model.deletingPathExtension().lastPathComponent
+            let encoderName = "\(baseName).encoder.\(PiperAppUtils.Constants.modelExtensiom)"
+            let decoderName = "\(baseName).decoder.\(PiperAppUtils.Constants.modelExtensiom)"
+            guard let encoder = urls.first(where: { $0.lastPathComponent == encoderName }),
+                  let decoder = urls.first(where: { $0.lastPathComponent == decoderName }) else {
+                return nil
+            }
+            return (encoder, decoder)
+        }
+
+        /// Classifies an arbitrary import selection into the parts of one
+        /// voice: the model is the `.onnx` file that is not a split part,
+        /// the json is the `.json` file, and the split parts are matched
+        /// to the model with the same rules as `splitModelFiles`.
+        /// A splits-only selection (issue #94) has no model file: then
+        /// the split parts are matched against each other - an encoder
+        /// and a decoder sharing the same base name - and the model
+        /// stays nil. A lone part (no sibling with the same base) is an
+        /// incomplete selection and classifies as no parts at all.
+        /// Files that are none of these (e.g. a readme) are ignored, and
+        /// when several models are present the first one wins and only
+        /// its own parts are returned.
+        public static func importedModelFiles(among urls: [URL]) -> ImportedModelFiles {
+            let modelExtension = PiperAppUtils.Constants.modelExtensiom
+            let model = urls.first { url in
+                url.pathExtension.lowercased() == modelExtension &&
+                    !url.lastPathComponent.hasSuffix(".encoder.\(modelExtension)") &&
+                    !url.lastPathComponent.hasSuffix(".decoder.\(modelExtension)")
+            }
+            let json = urls.first {
+                $0.pathExtension.lowercased() == PiperAppUtils.Constants.jsonModelExtension
+            }
+            var encoder: URL?
+            var decoder: URL?
+            if let model, let split = splitModelFiles(forModel: model, among: urls) {
+                encoder = split.encoder
+                decoder = split.decoder
+            } else if model == nil {
+                let encoderSuffix = ".encoder.\(modelExtension)"
+                if let candidate = urls.first(where: { $0.lastPathComponent.hasSuffix(encoderSuffix) }) {
+                    let baseName = String(candidate.lastPathComponent.dropLast(encoderSuffix.count))
+                    let decoderName = "\(baseName).decoder.\(modelExtension)"
+                    if let pair = urls.first(where: { $0.lastPathComponent == decoderName }) {
+                        encoder = candidate
+                        decoder = pair
+                    }
+                }
+            }
+            return ImportedModelFiles(model: model, json: json, encoder: encoder, decoder: decoder)
+        }
+
+        /// Whether the voice's files are on disk: the json must exist,
+        /// and either the full model file or both split parts (a
+        /// splits-only voice has no model file - see `model`).
         public var exist: Bool {
-            return FileManager.default.fileExists(atPath: model.path) &&
-            FileManager.default.fileExists(atPath: json.path)
+            guard FileManager.default.fileExists(atPath: json.path) else {
+                return false
+            }
+            return FileManager.default.fileExists(atPath: model.path) || hasSplitModel
         }
 
         public var modelFolder: URL? {
@@ -172,5 +265,24 @@ extension FileManager.ModelPaths: Hashable {
         hasher.combine(model.standardizedFileURL)
         hasher.combine(json.standardizedFileURL)
         hasher.combine(info)
+    }
+}
+
+/// The parts of one voice found in a single import selection, as
+/// classified by `FileManager.ModelPaths.importedModelFiles(among:)`.
+/// `encoder` and `decoder` are either both set (and belong to `model`)
+/// or both nil; any part may be missing when the user picked a classic
+/// model + json voice.
+public struct ImportedModelFiles {
+    public let model: URL?
+    public let json: URL?
+    public let encoder: URL?
+    public let decoder: URL?
+
+    public init(model: URL?, json: URL?, encoder: URL?, decoder: URL?) {
+        self.model = model
+        self.json = json
+        self.encoder = encoder
+        self.decoder = decoder
     }
 }

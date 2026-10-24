@@ -95,26 +95,21 @@ class VoiceLoader: NSObject {
             guard let self else { return }
             let keys = VoiceUpdateChecker.updateAvailableKeys(
                 voices: voices,
-                installed: installed
-            ) { paths in
-                VoiceUpdateChecker.InstalledFiles(
-                    modelSize: self.fileSize(at: paths.model),
-                    modelMD5: self.cachedMD5Digest(of: paths.model),
-                    configMD5: self.cachedMD5Digest(of: paths.json)
-                )
-            }
+                installed: installed,
+                filesProvider: self.installedFilesForUpdateCheck
+            )
             await MainActor.run {
                 self.updateAvailableKeys = keys
             }
         }
     }
 
-    private func fileSize(at url: URL) -> Int? {
+    func fileSize(at url: URL) -> Int? {
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         return (attributes?[.size] as? NSNumber)?.intValue
     }
 
-    private func cachedMD5Digest(of url: URL) -> String? {
+    func cachedMD5Digest(of url: URL) -> String? {
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         guard let size = (attributes?[.size] as? NSNumber)?.intValue,
               let modified = attributes?[.modificationDate] as? Date else {
@@ -135,12 +130,12 @@ class VoiceLoader: NSObject {
         return digest
     }
 
-    private enum Error: Swift.Error {
+    enum Error: Swift.Error {
         case nilURL
         case loadingFailed
         case wrongModelInfo
     }
-    private enum Constants {
+    enum Constants {
         static let baseURL = "https://huggingface.co/IhorShevchuk/piper1-voices-fp16-quantized/resolve/main"
         static let communitySamplesBaseURL = "https://rhasspy.github.io/piper-samples/samples"
 
@@ -231,13 +226,6 @@ class VoiceLoader: NSObject {
                                  continuation: AsyncThrowingStream<DownloadEvent, Swift.Error>.Continuation) async {
         var downloadedFiles: [URL] = []
         do {
-            guard let modelPath = voice.modelPath else {
-                throw Error.loadingFailed
-            }
-            guard let modelURL = URL(string: "\(Constants.baseURL)/\(modelPath)") else {
-                throw Error.nilURL
-            }
-
             let jsonLocalURL = try await downloadVoiceConfig(voice: voice, session: session, continuation: continuation)
             downloadedFiles.append(jsonLocalURL)
 
@@ -255,19 +243,28 @@ class VoiceLoader: NSObject {
                 modelBaseProgress = 0.35
             }
 
-            // Model is large → weight 95% (65% after a dictionary fetch)
-            let modelLocalURL = try await self.downloadFile(
-                from: modelURL,
-                session: session,
-                weight: modelWeight,
-                baseProgress: modelBaseProgress,
-                continuation: continuation
-            )
-            downloadedFiles.append(modelLocalURL)
-
-            guard let paths = FileManager.ModelPaths(model: modelLocalURL,
-                                                     json: jsonLocalURL) else {
-                throw Error.loadingFailed
+            let band: DownloadProgressBand = (weight: modelWeight, base: modelBaseProgress)
+            let paths: FileManager.ModelPaths
+            if let split = voice.selectedSplit {
+                // Split build (issue #94), with the Streaming voices
+                // setting on: fetch the encoder+decoder parts instead
+                // of the full model; the voice installs splits-only.
+                // With the setting off the classic model downloads.
+                let staged = try await downloadSplitModel(split: split,
+                                                          jsonLocalURL: jsonLocalURL,
+                                                          session: session,
+                                                          band: band,
+                                                          continuation: continuation)
+                downloadedFiles.append(contentsOf: staged.stagedFiles)
+                paths = staged.paths
+            } else {
+                let classic = try await downloadClassicModel(voice: voice,
+                                                             jsonLocalURL: jsonLocalURL,
+                                                             session: session,
+                                                             band: band,
+                                                             continuation: continuation)
+                downloadedFiles.append(classic.modelLocalURL)
+                paths = classic.paths
             }
 
             continuation.yield(.finished(paths))
@@ -368,7 +365,7 @@ class VoiceLoader: NSObject {
         return try JSONDecoder().decode(OpenJTalkManifest.self, from: data)
     }
 
-    private func downloadFile(
+    func downloadFile(
         from url: URL,
         session: UUID,
         weight: Double,

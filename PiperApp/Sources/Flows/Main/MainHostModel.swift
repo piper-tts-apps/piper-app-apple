@@ -20,8 +20,8 @@ class MainHostModel: @unchecked Sendable, ObservableObject {
         self.piper = piper
         self.loader = loader
         viewModel = Self.makeViewModel(installed: piper.installedVoices)
-        // Voice sizes follow the Model format setting; refresh the
-        // list when it changes in Settings.
+        // Voice sizes follow the Model format and Streaming voices
+        // settings; refresh the list when they change in Settings.
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,

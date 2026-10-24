@@ -29,14 +29,69 @@ enum VoiceUpdateChecker {
         var modelSize: Int?
         var modelMD5: String?
         var configMD5: String?
+        /// Splits-only installs (issue #94) have no model file: the
+        /// model digest stays nil (no single digest is fabricated over
+        /// the pair - the catalog publishes per-part digests) and the
+        /// parts are compared via the fields below instead. The model
+        /// size still carries the pair's total.
+        var isSplitsOnly: Bool = false
+        var splitEncoderMD5: String?
+        var splitDecoderMD5: String?
+        var splitEncoderSize: Int?
+        var splitDecoderSize: Int?
     }
 
+    /// The comparison follows the layout that is actually
+    /// installed, never the Streaming voices setting - the setting
+    /// governs new downloads only. A classic install compares
+    /// against the catalog's classic files even when the entry also
+    /// offers a split build (comparing it against the split parts
+    /// would flag a permanent phantom update), and a splits-only
+    /// install keeps comparing per-part even if the setting has
+    /// since been turned off: it is a working streaming voice, not
+    /// a stale classic one, so the toggle must not force it into a
+    /// re-download.
     static func status(voice: Voice, installed: InstalledFiles) -> VoiceUpdateStatus {
-        status(catalogModelMD5: voice.catalogModelFile?.md5Digest,
-               catalogModelSize: voice.catalogModelFile?.size_bytes,
-               catalogConfigMD5: voice.catalogJSONFile?.md5Digest,
-               variantModelSize: voice.compactVariant?.sizeBytes,
-               installed: installed)
+        if installed.isSplitsOnly {
+            return splitsOnlyStatus(voice: voice, installed: installed)
+        }
+        return status(catalogModelMD5: voice.catalogModelFile?.md5Digest,
+                      catalogModelSize: voice.catalogModelFile?.size_bytes,
+                      catalogConfigMD5: voice.catalogJSONFile?.md5Digest,
+                      variantModelSize: voice.compactVariant?.sizeBytes,
+                      installed: installed)
+    }
+
+    /// Splits-only installs have no model file, so the classic model
+    /// digest/size comparisons must not run: a split pair's total size
+    /// never equals the full model's size, and there is no single model
+    /// digest. The catalog's split build carries per-part digests and
+    /// sizes to compare against instead. Without a split build in the
+    /// entry there is no evidence either way.
+    private static func splitsOnlyStatus(voice: Voice, installed: InstalledFiles) -> VoiceUpdateStatus {
+        // A changed config alone (e.g. a dataset fix) is an update.
+        if digestsDiffer(voice.catalogJSONFile?.md5Digest, installed.configMD5) {
+            return .updateAvailable
+        }
+        guard let split = voice.split else {
+            return .unknown
+        }
+        if digestsMatch(split.encoder.md5Digest, installed.splitEncoderMD5),
+           digestsMatch(split.decoder.md5Digest, installed.splitDecoderMD5) {
+            return .upToDate
+        }
+        if digestsDiffer(split.encoder.md5Digest, installed.splitEncoderMD5) ||
+            digestsDiffer(split.decoder.md5Digest, installed.splitDecoderMD5) {
+            return .updateAvailable
+        }
+        // Without usable digests, part sizes can only prove a
+        // difference (the same rule as the classic size fallback).
+        if let encoderSize = installed.splitEncoderSize,
+           let decoderSize = installed.splitDecoderSize,
+           encoderSize != split.encoder.sizeBytes || decoderSize != split.decoder.sizeBytes {
+            return .updateAvailable
+        }
+        return .unknown
     }
 
     static func status(catalogModelMD5: String?,

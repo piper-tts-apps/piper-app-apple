@@ -81,9 +81,7 @@ class VoiceItemHostModel: @unchecked Sendable, ObservableObject {
                         await loader.updateDownloadProgress(value, for: voice.key)
 
                     case .finished(let modelPath):
-                        await self.piper.install(paths: modelPath, catalogKey: voice.key)
-                        try? FileManager.default.removeItem(at: modelPath.json)
-                        try? FileManager.default.removeItem(at: modelPath.model)
+                        await self.piper.installDownloaded(paths: modelPath, catalogKey: voice.key)
                         self.delegate?.modelDidChange()
                     }
                 }

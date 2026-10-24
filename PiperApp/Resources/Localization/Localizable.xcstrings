@@ -6201,6 +6201,244 @@
         }
       }
     },
+    "streaming_voices" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الأصوات المتدفقة"
+          }
+        },
+        "bn" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "স্ট্রিমিং ভয়েস"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Streaming-Stimmen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Streaming voices"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voces en streaming"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voix en streaming"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "स्ट्रीमिंग वॉइस"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Streaming hangok"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suara streaming"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voci in streaming"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Streamingstemmen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Głosy strumieniowe"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vozes em streaming"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strömmande röster"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Akışlı sesler"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Потокові голоси"
+          }
+        },
+        "ur-PK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اسٹریمنگ آوازیں"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流式语音"
+          }
+        }
+      }
+    },
+    "streaming_voices_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ينطبق على التنزيلات الجديدة. تبدأ الأصوات المتدفقة الكلام أسرع وتستخدم ذاكرة أقل."
+          }
+        },
+        "bn" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "নতুন ডাউনলোডের ক্ষেত্রে প্রযোজ্য। স্ট্রিমিং ভয়েসগুলি দ্রুত কথা বলা শুরু করে এবং কম মেমরি ব্যবহার করে।"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gilt für neue Downloads. Streaming-Stimmen beginnen schneller zu sprechen und verbrauchen weniger Speicher."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applies to new downloads. Streaming voices start speaking sooner and use less memory."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se aplica a las nuevas descargas. Las voces en streaming empiezan a hablar antes y usan menos memoria."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S'applique aux nouveaux téléchargements. Les voix en streaming commencent à parler plus tôt et utilisent moins de mémoire."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नए डाउनलोड पर लागू होता है। स्ट्रीमिंग वॉइस जल्दी बोलना शुरू करते हैं और कम मेमोरी का उपयोग करते हैं।"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Az új letöltésekre vonatkozik. A streaming hangok hamarabb kezdenek beszélni, és kevesebb memóriát használnak."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berlaku untuk unduhan baru. Suara streaming mulai berbicara lebih cepat dan menggunakan lebih sedikit memori."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si applica ai nuovi download. Le voci in streaming iniziano a parlare prima e usano meno memoria."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいダウンロードに適用されます。ストリーミング音声はより早く話し始め、使用メモリも少なくなります。"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geldt voor nieuwe downloads. Streamingstemmen beginnen sneller te spreken en gebruiken minder geheugen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dotyczy nowych pobrań. Głosy strumieniowe zaczynają mówić szybciej i zużywają mniej pamięci."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aplica-se a novos downloads. As vozes em streaming começam a falar mais cedo e usam menos memória."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gäller för nya hämtningar. Strömmande röster börjar tala snabbare och använder mindre minne."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni indirmeler için geçerlidir. Akışlı sesler daha erken konuşmaya başlar ve daha az bellek kullanır."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Застосовується до нових завантажень. Потокові голоси починають говорити швидше та споживають менше пам'яті."
+          }
+        },
+        "ur-PK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "نئے ڈاؤن لوڈز پر لاگو ہوتا ہے۔ اسٹریمنگ آوازیں جلدی بولنا شروع کرتی ہیں اور کم میموری استعمال کرتی ہیں۔"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于新下载。流式语音开始说话更快，占用内存更少。"
+          }
+        }
+      }
+    },
     "model_license" : {
       "extractionState" : "manual",
       "localizations" : {

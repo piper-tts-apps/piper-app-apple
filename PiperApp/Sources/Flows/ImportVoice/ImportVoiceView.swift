@@ -45,8 +45,7 @@ struct ImportVoiceHostModelView: View {
         .accessibilityElement(children: .combine)
     }
 
-    @State var isShowingModelFileSelector = false
-    @State var isShowingJsonFileSelector = false
+    @State var isShowingFileSelector = false
     var body: some View {
         NavigationStack {
             List {
@@ -57,37 +56,27 @@ struct ImportVoiceHostModelView: View {
                                      title: "select_model".localized,
                                      subtitle: "onnx_file".localized,
                                      fileName: hostModel.viewModel.selectedModel,
-                                     isPresented: $isShowingModelFileSelector,
+                                     isPresented: $isShowingFileSelector,
                                      isSelected: !hostModel.viewModel.selectedModel.isEmpty)
-                            .fileImporter(isPresented: $isShowingModelFileSelector,
-                                          allowedContentTypes: [Constants.modelUTI],
-                                          onCompletion: { results in
-                                switch results {
-                                case .success(let fileURL):
-                                    hostModel.select(model: fileURL)
-                                case .failure(let error):
-                                    Log.error("Failed to import model file: \(error)")
-                                }
-                            })
                         Spacer()
                         Divider()
                         Spacer()
                         importButton(image: .json,
                                      title: "select_json".localized,
                                      fileName: hostModel.viewModel.selectedJSON,
-                                     isPresented: $isShowingJsonFileSelector,
+                                     isPresented: $isShowingFileSelector,
                                      isSelected: !hostModel.viewModel.selectedJSON.isEmpty)
-                            .fileImporter(isPresented: $isShowingJsonFileSelector,
-                                          allowedContentTypes: [Constants.jsonUTI],
-                                          onCompletion: { results in
-                                switch results {
-                                case .success(let fileURL):
-                                    hostModel.select(json: fileURL)
-                                case .failure(let error):
-                                    Log.error("Failed to import json file: \(error)")
-                                }
-                            })
                         Spacer()
+                    }
+                    .fileImporter(isPresented: $isShowingFileSelector,
+                                  allowedContentTypes: [Constants.modelUTI, Constants.jsonUTI],
+                                  allowsMultipleSelection: true) { results in
+                        switch results {
+                        case .success(let fileURLs):
+                            hostModel.select(files: fileURLs)
+                        case .failure(let error):
+                            Log.error("Failed to import model files: \(error)")
+                        }
                     }
                 }
 
