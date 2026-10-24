@@ -6,6 +6,16 @@ import AVFAudio
 import Combine
 import PiperAppUtils
 
+#if DEBUG
+import OSLog
+
+/// Issue #94 bug-1 tracing, DEBUG builds only: host-side AudioUnit lifecycle
+/// (connect/disconnect/reconnect and what triggered them), logged under the
+/// same category as the AudioUnit trace so one Console.app filter
+/// (category "AURequestTrace") shows both sides of a play.
+private let hostAudioUnitTraceLog = OSLog(subsystem: Bundle.main.bundleIdentifier ?? "dev.ihor-shevchuk.piper", category: "AURequestTrace")
+#endif
+
 class PiperAudioUnit {
 
     enum AudioUnitError: Error {
@@ -32,6 +42,9 @@ class PiperAudioUnit {
         healthCheckTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             guard let self, let unit = self.audioUnit?.auAudioUnit else { return }
             if !self.engine.isRunning || !unit.renderResourcesAllocated {
+#if DEBUG
+                os_log("host health check engineRunning=%{public}d renderResourcesAllocated=%{public}d -> reconnect", log: hostAudioUnitTraceLog, type: .default, self.engine.isRunning ? 1 : 0, unit.renderResourcesAllocated ? 1 : 0)
+#endif
                 self.setStatus(.disconnected)
                 Task { await self.reconnect() }
             }
@@ -45,6 +58,9 @@ class PiperAudioUnit {
 
     private func handleEngineConfigurationChange() {
         if !engine.isRunning || !(audioUnit?.auAudioUnit.renderResourcesAllocated ?? false) {
+#if DEBUG
+            os_log("host config change engineRunning=%{public}d renderResourcesAllocated=%{public}d -> reconnect", log: hostAudioUnitTraceLog, type: .default, engine.isRunning ? 1 : 0, (audioUnit?.auAudioUnit.renderResourcesAllocated ?? false) ? 1 : 0)
+#endif
             Task { await reconnect() }
         }
     }
@@ -57,7 +73,13 @@ class PiperAudioUnit {
         switch type {
         case .began:
             setStatus(.disconnected)
+#if DEBUG
+            os_log("host interruption began", log: hostAudioUnitTraceLog, type: .default)
+#endif
         case .ended:
+#if DEBUG
+            os_log("host interruption ended -> reconnect", log: hostAudioUnitTraceLog, type: .default)
+#endif
             Task { await reconnect() }
         @unknown default:
             break
@@ -79,6 +101,9 @@ class PiperAudioUnit {
     }
 
     func connect() async {
+#if DEBUG
+        os_log("host connect", log: hostAudioUnitTraceLog, type: .default)
+#endif
         Log.debug("Connecting audio unit...")
         let componentDescription = AudioComponentDescription(componentType: kAudioUnitType_SpeechSynthesizer,
                                                              componentSubType: "pipr".audioComponentOSType,
@@ -112,6 +137,9 @@ class PiperAudioUnit {
     }
 
     func disconnect() async {
+#if DEBUG
+        os_log("host disconnect", log: hostAudioUnitTraceLog, type: .default)
+#endif
         Log.debug("Disconnecting audio unit...")
         invalidateHealthCheckTimer()
         cancellables.removeAll()
@@ -125,6 +153,9 @@ class PiperAudioUnit {
     }
 
     func reconnect() async {
+#if DEBUG
+        os_log("host reconnect", log: hostAudioUnitTraceLog, type: .default)
+#endif
         await disconnect()
         try? await Task.sleep(for: .seconds(2.0))
         await connect()
@@ -333,10 +364,16 @@ private extension PiperAudioUnit {
     }
 
     func handleRouteChange() {
+#if DEBUG
+        os_log("host route change -> reconnect", log: hostAudioUnitTraceLog, type: .default)
+#endif
         Task { await reconnect() }
     }
 
     func handleMediaServicesReset() {
+#if DEBUG
+        os_log("host media services reset -> reconnect", log: hostAudioUnitTraceLog, type: .default)
+#endif
         Task { await reconnect() }
     }
 }

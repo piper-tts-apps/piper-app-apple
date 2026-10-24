@@ -5,6 +5,15 @@ import Foundation
 import PiperAppUtils
 import AVFoundation
 
+#if DEBUG
+import OSLog
+
+/// Issue #94 bug-1 tracing, DEBUG builds only: which playback path a
+/// sample play takes (system AVSpeechSynthesizer vs direct
+/// PiperAudioUnit.play), under the same "AURequestTrace" category.
+private let hostPlayTraceLog = OSLog(subsystem: Bundle.main.bundleIdentifier ?? "dev.ihor-shevchuk.piper", category: "AURequestTrace")
+#endif
+
 class PiperManager {
     var installedVoices: [FileManager.ModelPaths] {
         FileManager.ModelPaths.installedModels
@@ -51,9 +60,15 @@ class PiperManager {
                 modelInfo.voiceId
             }
             if let voice = AVSpeechSynthesisVoice(identifier: "dev.ihor-shevchuk.piperapp.pipertts.\(piperVoiceId)") {
+#if DEBUG
+                os_log("host play path=system textLength=%{public}ld", log: hostPlayTraceLog, type: .default, demoText.count)
+#endif
                 syntheser = SpeechSynthesizer()
                 await syntheser?.speak(demoText, voice: voice)
             } else {
+#if DEBUG
+                os_log("host play path=direct textLength=%{public}ld", log: hostPlayTraceLog, type: .default, demoText.count)
+#endif
                 await audioUnit.play(text: demoText,
                                      piperVoiceId: piperVoiceId)
             }

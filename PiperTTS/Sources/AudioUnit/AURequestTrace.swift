@@ -15,6 +15,8 @@ import OSLog
 /// logarchives; the per-request "request summary" line at request end is
 /// the 1x-vs-2x verdict: its appended totals cover exactly one synthesis
 /// of the request's text, so a doubled sentence shows up as ~2x samples.
+/// Render-resource allocate/deallocate lines bracket the unit's lifecycle,
+/// so a request ended by teardown (not by completion or cancel) stands out.
 enum AURequestTrace {
     private static let log = OSLog(subsystem: Bundle.main.bundleIdentifier ?? "dev.ihor-shevchuk.piper", category: "AURequestTrace")
 
@@ -53,6 +55,14 @@ enum AURequestTrace {
     static func requestSummary(generation: UInt64, appendedChunks: Int, appendedSamples: Int, droppedChunks: Int, droppedSamples: Int) {
         os_log("request summary gen=%{public}llu appendedChunks=%{public}ld appendedSamples=%{public}ld droppedChunks=%{public}ld droppedSamples=%{public}ld",
                log: log, type: .default, generation, appendedChunks, appendedSamples, droppedChunks, droppedSamples)
+    }
+
+    static func renderResourcesAllocated() {
+        os_log("render resources allocated", log: log, type: .default)
+    }
+
+    static func renderResourcesDeallocated() {
+        os_log("render resources DEALLOCATED", log: log, type: .default)
     }
 }
 
@@ -94,6 +104,18 @@ final class AURequestTracer {
 
     func synthesizeStart(generation: UInt64) {
         AURequestTrace.synthesizeStart(generation: generation)
+    }
+
+    func allocated() {
+        AURequestTrace.renderResourcesAllocated()
+    }
+
+    /// deallocateRenderResources tears the unit down whether or not a
+    /// request is live; log the teardown first, then the usual end lines,
+    /// so a "request end" caused by teardown is unmistakable in a capture.
+    func deallocated() {
+        AURequestTrace.renderResourcesDeallocated()
+        end()
     }
 
     func chunk(stampedGeneration: UInt64, samples: Int, accepted: Bool, activeGeneration: UInt64) {

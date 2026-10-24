@@ -50,6 +50,9 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     public override func allocateRenderResources() throws {
         try super.allocateRenderResources()
         Log.debug("allocateRenderResources")
+#if DEBUG
+        requestTracer.allocated()
+#endif
     }
 
     public override func deallocateRenderResources() {
@@ -60,7 +63,7 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         piper = nil
         model = nil
 #if DEBUG
-        requestTracer.end()
+        requestTracer.deallocated()
 #endif
     }
 
@@ -240,8 +243,7 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
             if let sharedG2PW = FileManager.Constants.g2pwFolderURL,
                FileManager.default.fileExists(atPath: sharedG2PW.path) {
                 let fileManager = FileManager.default
-                let hasFiles = ["MONOPHONIC_CHARS.txt", "char_bopomofo_dict.json", "bopomofo_to_pinyin_wo_tune_dict.json"]
-                    .allSatisfy { fileManager.fileExists(atPath: sharedG2PW.appendingPathComponent($0).path) }
+                let hasFiles = ["MONOPHONIC_CHARS.txt", "char_bopomofo_dict.json", "bopomofo_to_pinyin_wo_tune_dict.json"].allSatisfy { fileManager.fileExists(atPath: sharedG2PW.appendingPathComponent($0).path) }
                 if hasFiles {
                     g2pwDir = sharedG2PW.path(percentEncoded: false)
                 } else {
@@ -274,12 +276,10 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
                 g2pwModelDir: g2pwDir,
                 openjtalkDictDir: openjtalkDir
             )
-            piper = (try? Piper(options: options)) ?? (try? Piper(modelPath: paths.model.path(percentEncoded: false),
-                                                                     andConfigPath: paths.json.path(percentEncoded: false)))
+            piper = (try? Piper(options: options)) ?? (try? Piper(modelPath: paths.model.path(percentEncoded: false), andConfigPath: paths.json.path(percentEncoded: false)))
             Log.debug("Piper Created with g2pwDir:\(g2pwDir ?? "nil") openjtalkDir:\(openjtalkDir ?? "nil")")
         } else {
-            piper = try? Piper(modelPath: paths.model.path(percentEncoded: false),
-                               andConfigPath: paths.json.path(percentEncoded: false))
+            piper = try? Piper(modelPath: paths.model.path(percentEncoded: false), andConfigPath: paths.json.path(percentEncoded: false))
             Log.debug("Piper Created")
         }
 #if os(iOS)
