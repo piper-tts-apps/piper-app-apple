@@ -184,12 +184,12 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         self.request = speechRequest
         self.activeGeneration = generation
         os_unfair_lock_unlock(&outputDataLock)
+        createPiperIfNeeded(voiceIdentifier: speechRequest.voice.identifier)
 #if DEBUG
         requestTracer.begin(generation: generation, textLength: speechRequest.ssmlRepresentation.count)
+        requestTracer.synthesizeStart(generation: generation)
 #endif
-        createPiperIfNeeded(voiceIdentifier: speechRequest.voice.identifier)
-        piper?.synthesizeSSML(speechRequest.ssmlRepresentation,
-                              speakerId: speakerId)
+        piper?.synthesizeSSML(speechRequest.ssmlRepresentation, speakerId: speakerId)
     }
 
     public override func cancelSpeechRequest() {
