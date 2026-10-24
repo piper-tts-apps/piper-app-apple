@@ -291,19 +291,33 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
 
 extension PiperTTSAudioUnit: PiperDelegate {
     public func piperDidReceiveSamples(_ samples: UnsafePointer<Float>, withSize size: Int) {
-        let buf = UnsafeBufferPointer(start: samples, count: size)
         if size == 0 { return }
+        // Stamp the chunk with the generation of the request active on arrival.
+        // The append below validates this stamp, never the mutable
+        // activeGeneration read at append time: after a cancel and a new
+        // request, the slot already holds the new generation, so slot
+        // validation would rubber-stamp a stale chunk from the cancelled
+        // request (issue #94, bug 2). Work between arrival and append - the
+        // resampler runs outside the lock - can span the whole cancel/begin
+        // boundary; the stamp is what rejects the chunk when it lands.
+        os_unfair_lock_lock(&outputDataLock)
+        let producingGeneration = activeGeneration
+        let hasActiveRequest = request != nil
+        os_unfair_lock_unlock(&outputDataLock)
+        guard hasActiveRequest, requestGate.isCurrent(producingGeneration) else { return }
+
+        let buf = UnsafeBufferPointer(start: samples, count: size)
         if let modelFormat = model?.audioFormat,
            modelFormat.sampleRate != format.sampleRate {
             let resampled = AudioResampler.resampleBuffer(buf, inputRate: modelFormat.sampleRate, outputRate: format.sampleRate)
             os_unfair_lock_lock(&outputDataLock)
-            if requestGate.isCurrent(activeGeneration) {
+            if requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration) {
                 outputData.appendAndEnforceMax(contentsOf: resampled, maxCount: maxSamplesCount)
             }
             os_unfair_lock_unlock(&outputDataLock)
         } else {
             os_unfair_lock_lock(&outputDataLock)
-            if requestGate.isCurrent(activeGeneration) {
+            if requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration) {
                 outputData.appendAndEnforceMax(contentsOf: buf, maxCount: maxSamplesCount)
             }
             os_unfair_lock_unlock(&outputDataLock)

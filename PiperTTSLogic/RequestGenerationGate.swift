@@ -42,4 +42,21 @@ public final class RequestGenerationGate {
         defer { lock.unlock() }
         return generation == self.generation
     }
+
+    /// Whether a chunk stamped with `producingGeneration` at production time may
+    /// still be appended to the output queue of the request whose pinned
+    /// generation is `activeGeneration`.
+    ///
+    /// True only while the producing request IS the active request and its
+    /// generation has not been invalidated by a cancel or a newer request.
+    /// Validating the live slot value instead (`isCurrent(activeGeneration)`
+    /// evaluated at append time) cannot reject stale chunks: once a newer
+    /// request begins, the slot holds the new generation, so the check passes
+    /// for any chunk that arrives late - including one produced by the
+    /// cancelled request.
+    public func shouldAcceptChunk(producedUnder producingGeneration: UInt64, forActiveRequest activeGeneration: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return producingGeneration == activeGeneration && producingGeneration == generation
+    }
 }
