@@ -76,4 +76,90 @@ final class RequestGenerationGateTests: XCTestCase {
         }
         XCTAssertTrue(gate.isCurrent(current))
     }
+
+    // MARK: - Chunk append validation (bug 2: stale audio after cancel/resume)
+    //
+    // The AudioUnit used to validate an arriving chunk with
+    // `gate.isCurrent(activeGeneration)`, reading the MUTABLE slot at append time.
+    // Once a new request begins, the slot holds the new generation, so that check
+    // passes for any late chunk - including one produced by the cancelled request.
+    // `shouldAcceptChunk(producedUnder:forActiveRequest:)` is the pinned decision
+    // the AudioUnit now uses instead: the producer callback stamps the chunk with
+    // the active request's generation when the chunk arrives, and the append
+    // validates that stamp.
+
+    func testValidatingTheLiveSlotCannotRejectAStaleChunk() {
+        // Documents the hazard in the old expression: after cancel + new begin,
+        // isCurrent(slot) is true no matter which request produced the chunk.
+        let gate = RequestGenerationGate()
+        _ = gate.begin() // request A pins the slot
+        gate.cancel()
+        let slotAfterNewBegin = gate.begin() // request B overwrites the slot
+        XCTAssertTrue(gate.isCurrent(slotAfterNewBegin),
+                      "Slot validation is vacuous once any request is active - the reason a stamp is required")
+    }
+
+    func testChunkProducedByCancelledRequestRejectedAfterNewRequestBegins() {
+        let gate = RequestGenerationGate()
+        let requestA = gate.begin()
+        let stampA = requestA // producer callback stamps the chunk on arrival
+        gate.cancel()
+        let requestB = gate.begin()
+        XCTAssertFalse(gate.shouldAcceptChunk(producedUnder: stampA, forActiveRequest: requestB),
+                       "A chunk produced by the cancelled request must never be appended to the new request")
+        XCTAssertTrue(gate.shouldAcceptChunk(producedUnder: requestB, forActiveRequest: requestB))
+    }
+
+    func testChunkProducedByCancelledRequestRejectedEvenIfSlotNotYetOverwritten() {
+        // The AudioUnit does not reset activeGeneration on cancel, so the slot can
+        // still hold the cancelled request's generation. Slot equality alone would
+        // accept the chunk; the gate must also have moved past the stamp.
+        let gate = RequestGenerationGate()
+        let requestA = gate.begin()
+        gate.cancel()
+        XCTAssertFalse(gate.shouldAcceptChunk(producedUnder: requestA, forActiveRequest: requestA))
+    }
+
+    func testChunkAcceptedWhileProducingRequestIsStillActive() {
+        let gate = RequestGenerationGate()
+        let requestA = gate.begin()
+        XCTAssertTrue(gate.shouldAcceptChunk(producedUnder: requestA, forActiveRequest: requestA),
+                      "The non-cancel path must be unchanged: chunks of the active request still append")
+    }
+
+    func testQueuedAudioOfCancelledRequestNeverRendersIntoNextRequest() {
+        // Logic-level end-to-end, mirroring the AudioUnit's composition:
+        // FloatRingBuffer is the output queue, the gate plus shouldAcceptChunk
+        // decide appends, and cancel = gate invalidation + buffer flush
+        // (removeRequestAndCleanOutputData in PiperTTSAudioUnit).
+        let gate = RequestGenerationGate()
+        var buffer = FloatRingBuffer()
+
+        // Request A synthesizes several-x realtime; the surplus is appended.
+        let requestA = gate.begin()
+        if gate.shouldAcceptChunk(producedUnder: requestA, forActiveRequest: requestA) {
+            buffer.append(contentsOf: [Float](repeating: 1, count: 4096))
+        }
+        XCTAssertEqual(buffer.count, 4096)
+
+        // User cancels mid-sentence: invalidation + flush of queued audio.
+        gate.cancel()
+        buffer.clear()
+
+        // Meanwhile request B begins and its first chunk appends.
+        let requestB = gate.begin()
+        if gate.shouldAcceptChunk(producedUnder: requestB, forActiveRequest: requestB) {
+            buffer.append(contentsOf: [Float](repeating: 2, count: 2048))
+        }
+
+        // A chunk of A was in flight (inside the resampler) across the cancel and
+        // only now reaches the append. It must be dropped.
+        if gate.shouldAcceptChunk(producedUnder: requestA, forActiveRequest: requestB) {
+            buffer.append(contentsOf: [Float](repeating: 1, count: 512))
+        }
+
+        XCTAssertEqual(buffer.count, 2048, "Only the new request's audio may be queued")
+        XCTAssertTrue(buffer.snapshot.allSatisfy { $0 == 2 },
+                      "No stale samples from the cancelled request may render into the next one")
+    }
 }
