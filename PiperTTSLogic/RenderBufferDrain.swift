@@ -18,10 +18,15 @@ import Foundation
 public enum RenderPriming {
     /// How much buffered audio ends priming, in seconds of samples at
     /// the render rate.
-    public static let primeDurationSeconds: Double = 0.5
+    /// Device-tuned (Ihor, on the echoing iPhone): 12.5 ms is ~276 frames
+    /// at 22050 Hz - under one render pull. Priming only needs the drain
+    /// to start behind the first full synthesis window instead of racing
+    /// its first frames; the 0.5 s first guess added start latency
+    /// without improving the audio.
+    public static let primeDurationSeconds: Double = 0.0125
 
     /// The priming threshold in frames for a stream at `sampleRate`
-    /// (22050 -> 11025, 16000 -> 8000, 44100 -> 22050).
+    /// (22050 -> 275, 16000 -> 200, 44100 -> 551).
     public static func thresholdFrames(sampleRate: Double) -> Int {
         Int(primeDurationSeconds * sampleRate)
     }
