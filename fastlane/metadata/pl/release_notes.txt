@@ -1,3 +1,2 @@
-- Zaktualizowany interfejs: jedna lista głosów z wyszukiwaniem, Twoje zainstalowane języki na górze
-- Dodano obsługę języka japońskiego
+- Głosy zaczynają mówić szybciej, zwłaszcza przy dłuższych tekstach
 - Poprawki błędów i drobne ulepszenia

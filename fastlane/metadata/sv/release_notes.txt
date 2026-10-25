@@ -1,3 +1,2 @@
-- Uppdaterat gränssnitt: en röstlista med sökning och dina installerade språk först
-- Stöd för japanska har lagts till
+- Röster börjar tala snabbare, särskilt för längre texter
 - Buggfixar och små förbättringar

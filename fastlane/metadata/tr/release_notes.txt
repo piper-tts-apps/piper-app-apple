@@ -1,3 +1,2 @@
-- Güncellenmiş arayüz: arama ve yüklü dillerinizin ilk sırada olduğu tek bir ses listesi
-- Japonca dil desteği eklendi
+- Sesler, özellikle uzun metinlerde daha erken konuşmaya başlar
 - Hata düzeltmeleri ve küçük iyileştirmeler

@@ -1,3 +1,2 @@
-- Vernieuwde interface: één stemmenlijst met zoeken, uw geïnstalleerde talen eerst
-- Ondersteuning voor het Japans toegevoegd
+- Stemmen beginnen sneller te spreken, vooral bij langere teksten
 - Bugfixes en kleine verbeteringen
