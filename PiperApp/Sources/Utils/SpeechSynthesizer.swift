@@ -3,14 +3,6 @@
 
 import Foundation
 import AVFoundation
-#if DEBUG
-import OSLog
-
-/// Issue #94 bug-1 tracing, DEBUG builds only: host-side utterance issuance,
-/// logged under the same category as the AudioUnit trace so one Console.app
-/// filter (category "AURequestTrace") shows both sides of a play.
-private let hostSpeechTraceLog = OSLog(subsystem: Bundle.main.bundleIdentifier ?? "dev.ihor-shevchuk.piper", category: "AURequestTrace")
-#endif
 
 class SpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate {
     private var synthesizer: AVSpeechSynthesizer!
@@ -29,9 +21,6 @@ class SpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate {
         // Use withCheckedContinuation to pause execution until resume() is called
         await withCheckedContinuation { continuation in
             self.continuation = continuation
-#if DEBUG
-            os_log("host speak textLength=%{public}ld", log: hostSpeechTraceLog, type: .default, text.count)
-#endif
             synthesizer.speak(utterance)
         }
     }
@@ -50,9 +39,6 @@ class SpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     func stop() {
-#if DEBUG
-        os_log("host stopSpeaking", log: hostSpeechTraceLog, type: .default)
-#endif
         synthesizer.stopSpeaking(at: .immediate)
     }
 }

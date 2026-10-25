@@ -4,25 +4,26 @@
 import Foundation
 
 /// The priming cushion a fresh request builds before real samples are
-/// rendered (issue #94 bug 1 follow-up).
+/// rendered.
 ///
 /// Synthesis streams in bursts (whole decoder windows at a time) while
 /// the host drains smoothly, so on a device where synthesis runs at
 /// roughly realtime the buffer grazes empty at chunk boundaries and
-/// every slightly-late window starves a render pull - in the gen=25
-/// device play, 52 zero-filled pulls / 22,759 frames (~1 s) of silence
-/// landed mid-utterance as audible dropouts. While a request is priming,
+/// every slightly-late window starves a render pull, padding silence
+/// mid-utterance as audible dropouts. While a request is priming,
 /// pulls answer full-size silence WITHOUT consuming the buffer until it
 /// holds `primeDurationSeconds` of audio (or synthesis completes); the
 /// cushion then absorbs the boundary jitter for the rest of the request.
 public enum RenderPriming {
     /// How much buffered audio ends priming, in seconds of samples at
     /// the render rate.
-    /// Device-tuned (Ihor, on the echoing iPhone): 12.5 ms is ~276 frames
-    /// at 22050 Hz - under one render pull. Priming only needs the drain
-    /// to start behind the first full synthesis window instead of racing
-    /// its first frames; the 0.5 s first guess added start latency
-    /// without improving the audio.
+    ///
+    /// Device-tuned to 12.5 ms (~276 frames at 22050 Hz - under one
+    /// render pull): priming only needs the drain to start behind the
+    /// first full synthesis window instead of racing its first frames;
+    /// the head start then persists because production roughly matches
+    /// consumption. Larger values added start latency without improving
+    /// the audio.
     public static let primeDurationSeconds: Double = 0.0125
 
     /// The priming threshold in frames for a stream at `sampleRate`
@@ -34,7 +35,7 @@ public enum RenderPriming {
 
 /// Outcome of a single render pull against the synthesis buffer.
 ///
-/// The render contract (issue #94 bug 1): while a request is active a pull
+/// The render contract: while a request is active a pull
 /// ALWAYS produces a full-size render - `byteSize` is the full
 /// `frameCount * 4`, with any shortfall reported as `zeroFilled` silence
 /// frames - and it produces it immediately, without waiting for synthesis.
@@ -121,7 +122,7 @@ extension FloatRingBuffer {
         // range (real samples + silence), never just the copied prefix.
         // When this pull drained the last samples of a completed synthesis
         // it is also the final one, so completion rides along with the
-        // render (RHVoice-style) instead of needing a later empty pull.
+        // render instead of needing a later empty pull.
         return .rendered(
             copied: copied,
             zeroFilled: zeroFilled,

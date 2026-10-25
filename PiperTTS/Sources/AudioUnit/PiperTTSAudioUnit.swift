@@ -21,19 +21,17 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     private var outputDataLock = os_unfair_lock_s()
     internal var outputData = FloatRingBuffer()
 
-    /// Priming cushion state for the active request (issue #94 bug 1
-    /// follow-up), guarded by outputDataLock: while `isPriming` holds,
-    /// pulls answer silence without consuming until the buffer reaches
-    /// `primeThresholdFrames` (see RenderPriming); reset at request begin and in removeRequestAndCleanOutputData (cleanUp).
+    /// Priming cushion state for the active request, guarded by
+    /// outputDataLock: while `isPriming` holds, pulls answer silence
+    /// without consuming until the buffer reaches `primeThresholdFrames`
+    /// (see RenderPriming); reset at request begin and in
+    /// removeRequestAndCleanOutputData (cleanUp).
     private var isPriming = true
     private var primeThresholdFrames = 0
 
     private let requestGate = RequestGenerationGate()
     /// Generation of the request currently being synthesized. Guarded by outputDataLock.
     private var activeGeneration: UInt64 = 0
-#if DEBUG
-    private let requestTracer = AURequestTracer()
-#endif
 
     internal let maxBufferDurationSeconds: Double = 120.0
     internal let maxSamplesCount: Int
@@ -54,16 +52,10 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     public override func allocateRenderResources() throws {
         try super.allocateRenderResources()
         Log.debug("allocateRenderResources")
-#if DEBUG
-        requestTracer.allocated()
-#endif
     }
 
     public override func deallocateRenderResources() {
         super.deallocateRenderResources()
-#if DEBUG
-        requestTracer.deallocated()
-#endif
         // Cancel the live synthesis before teardown, in cleanUp()'s order -
         // clearing alone orphaned the self-retained synthesis operation.
         removeRequestAndCleanOutputData()
@@ -122,11 +114,9 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
 
         // One lock hold for the whole drain: the pull is decided against
         // the buffer count at this instant, and copy + removeFirst stay
-        // atomic. The pull never waits for synthesis (issue #94 bug 1):
-        // the pre-fix code blocked the render thread in pauseUntil,
-        // recursed, and then returned a short buffer - the echo's
-        // trigger. A starved pull now renders full-size silence instead;
-        // the drain contract lives in PiperTTSLogic (RenderDrainOutcome).
+        // atomic. The pull never waits for synthesis: a starved pull
+        // renders full-size silence instead. The drain contract lives in
+        // PiperTTSLogic (RenderDrainOutcome).
         os_unfair_lock_lock(&outputDataLock)
         let thresholdAtPull = primeThresholdFrames
         let outcome = outputData.drainForRender(into: frames, frameCount: intFrameCount, synthesisCompleted: synthesisCompleted, isPriming: isPriming, primeThresholdFrames: thresholdAtPull)
@@ -140,21 +130,16 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
             self.cleanUp()
             return noErr
         case let .primingSilence(byteSize, buffered):
-            // Still building the cushion: full-size silence, nothing
-            // consumed - priming in the summary, never underrun.
+            // Still building the cushion: full-size silence, nothing consumed.
             setRenderedByteSize(outputAudioBufferList, byteSize: byteSize)
 #if DEBUG
-            requestTracer.priming(frames: intFrameCount)
             Log.debug(type: .synthesizer, "Priming: buffered \(buffered) of \(thresholdAtPull) frames. Rendered silence.")
 #endif
             actionFlags.pointee = .offlineUnitRenderAction_Render
             return noErr
-        case let .rendered(copied, zeroFilled, byteSize, remaining, isFinal):
+        case let .rendered(copied, _, byteSize, remaining, isFinal):
             setRenderedByteSize(outputAudioBufferList, byteSize: byteSize)
 #if DEBUG
-            if zeroFilled > 0 {
-                requestTracer.underrun(zeroFilledFrames: zeroFilled)
-            }
             Log.debug(type: .synthesizer, "Rendered: \(copied). Remaining buffer: \(remaining)")
 #endif
             if isFinal {
@@ -168,8 +153,9 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     }
 
     /// Points the single output buffer at `byteSize` bytes. Every render
-    /// is full-size: a short byteSize is the echo trigger (issue #94
-    /// bug 1), so this is the one place the descriptor is written.
+    /// is full-size: a short byteSize invites the host to re-pull the
+    /// same timestamp, doubling the audio, so this is the one place the
+    /// descriptor is written.
     private func setRenderedByteSize(_ outputAudioBufferList: UnsafeMutablePointer<AudioBufferList>, byteSize: Int) {
         outputAudioBufferList.pointee.mNumberBuffers = 1
         let bufferList = UnsafeMutableAudioBufferListPointer(outputAudioBufferList)
@@ -194,26 +180,16 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         self.primeThresholdFrames = RenderPriming.thresholdFrames(sampleRate: format.sampleRate)
         os_unfair_lock_unlock(&outputDataLock)
         createPiperIfNeeded(voiceIdentifier: speechRequest.voice.identifier)
-#if DEBUG
-        requestTracer.begin(generation: generation, textLength: speechRequest.ssmlRepresentation.count)
-        requestTracer.synthesizeStart(generation: generation)
-#endif
         piper?.synthesizeSSML(speechRequest.ssmlRepresentation, speakerId: speakerId)
     }
 
     public override func cancelSpeechRequest() {
         Log.debug("cancelSpeechRequest")
-#if DEBUG
-        requestTracer.cancel()
-#endif
         cleanUp()
     }
 
     func cleanUp() {
         Log.debug("cleanUp request:\(self.request?.ssmlRepresentation ?? "nil")")
-#if DEBUG
-        requestTracer.end()
-#endif
         removeRequestAndCleanOutputData()
     }
 
@@ -309,16 +285,13 @@ extension PiperTTSAudioUnit: PiperDelegate {
         // Stamp the chunk with the generation of the request active on
         // arrival; the append validates the stamp, never the mutable
         // activeGeneration (after cancel + new request it holds the new
-        // generation and would rubber-stamp stale chunks - bug 2). The
+        // generation and would rubber-stamp stale chunks). The
         // resampler runs outside the lock, across the cancel boundary.
         os_unfair_lock_lock(&outputDataLock)
         let producingGeneration = activeGeneration
         let hasActiveRequest = request != nil
         os_unfair_lock_unlock(&outputDataLock)
         guard hasActiveRequest, requestGate.isCurrent(producingGeneration) else {
-#if DEBUG
-            requestTracer.chunkDroppedEarly(stampedGeneration: producingGeneration, samples: size)
-#endif
             return
         }
 
@@ -331,26 +304,14 @@ extension PiperTTSAudioUnit: PiperDelegate {
             if accepted {
                 outputData.appendAndEnforceMax(contentsOf: resampled, maxCount: maxSamplesCount)
             }
-#if DEBUG
-            let slotAtAppend = activeGeneration
-#endif
             os_unfair_lock_unlock(&outputDataLock)
-#if DEBUG
-            requestTracer.chunk(stampedGeneration: producingGeneration, samples: resampled.count, accepted: accepted, activeGeneration: slotAtAppend)
-#endif
         } else {
             os_unfair_lock_lock(&outputDataLock)
             let accepted = requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration)
             if accepted {
                 outputData.appendAndEnforceMax(contentsOf: buf, maxCount: maxSamplesCount)
             }
-#if DEBUG
-            let slotAtAppend = activeGeneration
-#endif
             os_unfair_lock_unlock(&outputDataLock)
-#if DEBUG
-            requestTracer.chunk(stampedGeneration: producingGeneration, samples: size, accepted: accepted, activeGeneration: slotAtAppend)
-#endif
         }
     }
 
