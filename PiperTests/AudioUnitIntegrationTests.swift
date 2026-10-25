@@ -13,13 +13,13 @@ final class AudioUnitIntegrationTests: XCTestCase {
 
     private func simulateRender(availableCount: Int, frameCount: Int, completed: Bool) -> (action: String, copied: Int) {
         let intFrameCount = frameCount
-        if availableCount == 0 {
-            if completed {
-                return ("complete", 0)
-            } else {
-                return ("retry", 0)
-            }
+        if availableCount == 0 && completed {
+            return ("complete", 0)
         }
+        // Every other pull renders immediately at full size: real
+        // samples where available, silence for the shortfall.
+        // A starved pull renders 0 real samples - it must not complete
+        // early, and it must not block or retry.
         let actualCopied = min(availableCount, intFrameCount)
         return ("render", actualCopied)
     }
@@ -50,9 +50,11 @@ final class AudioUnitIntegrationTests: XCTestCase {
         // ceil(2_646_000 / 1024) = 2584 renders (last partial 1008 samples)
         XCTAssertEqual(renders, 2584, "Expected ceil division renders for 120s buffer")
 
-        // After draining but not completed, should retry, not complete
+        // After draining but not completed, renders silence - it must
+        // not complete early, and it must not block or retry either
         let afterDrainNotCompleted = simulateRender(availableCount: 0, frameCount: frameCount, completed: false)
-        XCTAssertEqual(afterDrainNotCompleted.action, "retry", "If piper not completed and buffer empty, should retry, not complete early")
+        XCTAssertEqual(afterDrainNotCompleted.action, "render", "If piper not completed and buffer empty, should render silence, not complete early")
+        XCTAssertEqual(afterDrainNotCompleted.copied, 0)
 
         // Only when completed and empty -> complete
         let done = simulateRender(availableCount: 0, frameCount: frameCount, completed: true)
