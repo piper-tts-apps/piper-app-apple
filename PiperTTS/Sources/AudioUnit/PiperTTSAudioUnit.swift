@@ -20,7 +20,6 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
 
     private var outputDataLock = os_unfair_lock_s()
     internal var outputData = FloatRingBuffer()
-    private var outputRecurseCallNumber = 0
 
     private let requestGate = RequestGenerationGate()
     /// Generation of the request currently being synthesized. Guarded by outputDataLock.
@@ -29,8 +28,6 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     private let requestTracer = AURequestTracer()
 #endif
 
-    private let outputRecurseCallNumberMax: UInt32 = 400
-    private let baseDelayMicroseconds: UInt32 = 5000
     internal let maxBufferDurationSeconds: Double = 120.0
     internal let maxSamplesCount: Int
 
@@ -88,7 +85,7 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     }
 
     // Made internal for unit testing – previously private
-    // swiftlint:disable:next function_parameter_count function_body_length
+    // swiftlint:disable:next function_parameter_count
     internal func doPerformRender(
       actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
       timestamp: UnsafePointer<AudioTimeStamp>,
@@ -98,8 +95,6 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
       renderEvents: UnsafePointer<AURenderEvent>?,
       renderPull: AURenderPullInputBlock?
     ) -> AUAudioUnitStatus {
-        let renderGeneration = requestGate.currentGeneration
-
         guard let piper = self.piper else {
             Log.error("Piper is nil while request for rendering came.")
             return kAudioComponentErr_InstanceInvalidated
@@ -113,66 +108,50 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         }
 
         let intFrameCount = Int(frameCount)
-        let availableCount: Int
+        let synthesisCompleted = piper.completed()
+
+        let bufferList = UnsafeMutableAudioBufferListPointer(outputAudioBufferList)
+        let frames = bufferList[0].mData!.assumingMemoryBound(to: Float32.self)
+
+        // One lock hold for the whole drain: the pull is decided against
+        // the buffer count at this instant, and copy + removeFirst stay
+        // atomic. The pull never waits for synthesis (issue #94 bug 1):
+        // the pre-fix code blocked the render thread in pauseUntil,
+        // recursed, and then returned a short buffer - the echo's
+        // trigger. A starved pull now renders full-size silence instead;
+        // the drain contract lives in PiperTTSLogic (RenderDrainOutcome).
         os_unfair_lock_lock(&outputDataLock)
-        availableCount = outputData.count
+        let outcome = outputData.drainForRender(
+            into: frames, frameCount: intFrameCount, synthesisCompleted: synthesisCompleted
+        )
         os_unfair_lock_unlock(&outputDataLock)
 
-        let countToCopy = min(availableCount, intFrameCount)
-
-        if countToCopy < intFrameCount {
-            let completedRendering = piper.completed()
-            if (completedRendering && availableCount == 0) || request == nil {
-                Log.debug(type: .synthesizer, "Completed rendering")
+        switch outcome {
+        case .complete:
+            Log.debug(type: .synthesizer, "Completed rendering")
+            actionFlags.pointee = .offlineUnitRenderAction_Complete
+            self.cleanUp()
+            return noErr
+        case let .rendered(copied, zeroFilled, byteSize, remaining, isFinal):
+            outputAudioBufferList.pointee.mNumberBuffers = 1
+            var renderedBuffer = bufferList[0]
+            renderedBuffer.mNumberChannels = 1
+            renderedBuffer.mDataByteSize = UInt32(byteSize)
+            bufferList[0] = renderedBuffer
+#if DEBUG
+            if zeroFilled > 0 {
+                requestTracer.underrun(zeroFilledFrames: zeroFilled)
+            }
+            Log.debug(type: .synthesizer, "Rendered: \(copied). Remaining buffer: \(remaining)")
+#endif
+            if isFinal {
                 actionFlags.pointee = .offlineUnitRenderAction_Complete
                 self.cleanUp()
-                return noErr
+            } else {
+                actionFlags.pointee = .offlineUnitRenderAction_Render
             }
-
-            outputRecurseCallNumber += 1
-            if outputRecurseCallNumber < outputRecurseCallNumberMax && !completedRendering {
-                Log.error(type: .synthesizer, "Rendering in progress no data. Trying one more time: \(self.outputRecurseCallNumber)")
-                pauseUntil(maxDelayFactor: outputRecurseCallNumberMax) { [weak self] in
-                    guard let self else { return true }
-                    os_unfair_lock_lock(&self.outputDataLock)
-                    let hasEnoughData = self.outputData.count >= intFrameCount
-                    let isCancelled = self.request == nil || !self.requestGate.isCurrent(renderGeneration)
-                    os_unfair_lock_unlock(&self.outputDataLock)
-                    return piper.completed() || hasEnoughData || isCancelled
-                }
-                return doPerformRender(actionFlags: actionFlags, timestamp: timestamp, frameCount: frameCount, outputBusNumber: outputBusNumber, outputAudioBufferList: outputAudioBufferList, renderEvents: renderEvents, renderPull: renderPull)
-            }
-            Log.error(type: .synthesizer, "Tried \(self.outputRecurseCallNumber), without luck. Returning what have currently")
+            return noErr
         }
-
-        outputRecurseCallNumber = 0
-
-        let actualCopied = min(availableCount, intFrameCount)
-        outputAudioBufferList.pointee.mNumberBuffers = 1
-        var unsafeBuffer = UnsafeMutableAudioBufferListPointer(outputAudioBufferList)[0]
-        let frames = unsafeBuffer.mData!.assumingMemoryBound(to: Float32.self)
-        if actualCopied < intFrameCount {
-            frames.update(repeating: 0, count: intFrameCount)
-        }
-        unsafeBuffer.mNumberChannels = 1
-        unsafeBuffer.mDataByteSize = UInt32(actualCopied * MemoryLayout<Float32>.size)
-
-        os_unfair_lock_lock(&outputDataLock)
-        if actualCopied > 0 {
-            outputData.withUnsafeBufferPointer { src in
-                if let base = src.baseAddress {
-                    frames.update(from: base, count: actualCopied)
-                }
-            }
-            outputData.removeFirst(actualCopied)
-        }
-        os_unfair_lock_unlock(&outputDataLock)
-
-        actionFlags.pointee = .offlineUnitRenderAction_Render
-#if DEBUG
-        Log.debug(type: .synthesizer, "Rendered: \(actualCopied). Remaining buffer: \(availableCount - actualCopied)")
-#endif
-        return noErr
     }
 
     public override func synthesizeSpeechRequest(_ speechRequest: AVSpeechSynthesisProviderRequest) {
@@ -218,15 +197,6 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         outputData.clear()
         os_unfair_lock_unlock(&outputDataLock)
         piper?.cancel()
-    }
-
-    internal func pauseUntil(maxDelayFactor: UInt32, or condition: @escaping () -> Bool) {
-        let maxDelaySeconds = Double(baseDelayMicroseconds * maxDelayFactor) / 1_000_000
-        let checkIntervalSeconds = maxDelaySeconds / 5.0
-        let startTime = Date()
-        while !condition() && Date().timeIntervalSince(startTime) < maxDelaySeconds {
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(checkIntervalSeconds))
-        }
     }
 
     private func createPiperIfNeeded(voiceIdentifier: String) {

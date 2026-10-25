@@ -52,9 +52,21 @@ enum AURequestTrace {
         os_log("request end gen=%{public}llu", log: log, type: .default, generation)
     }
 
-    static func requestSummary(generation: UInt64, appendedChunks: Int, appendedSamples: Int, droppedChunks: Int, droppedSamples: Int) {
-        os_log("request summary gen=%{public}llu appendedChunks=%{public}ld appendedSamples=%{public}ld droppedChunks=%{public}ld droppedSamples=%{public}ld",
-               log: log, type: .default, generation, appendedChunks, appendedSamples, droppedChunks, droppedSamples)
+    /// The per-request counters totalled into the "request summary" line.
+    struct Summary {
+        let generation: UInt64
+        let appendedChunks: Int
+        let appendedSamples: Int
+        let droppedChunks: Int
+        let droppedSamples: Int
+        let zeroFilledPulls: Int
+        let zeroFilledFrames: Int
+    }
+
+    static func requestSummary(_ summary: Summary) {
+        os_log("request summary gen=%{public}llu appendedChunks=%{public}ld appendedSamples=%{public}ld droppedChunks=%{public}ld droppedSamples=%{public}ld zeroFilledPulls=%{public}ld zeroFilledFrames=%{public}ld",
+               log: log, type: .default, summary.generation, summary.appendedChunks, summary.appendedSamples,
+               summary.droppedChunks, summary.droppedSamples, summary.zeroFilledPulls, summary.zeroFilledFrames)
     }
 
     static func renderResourcesAllocated() {
@@ -75,6 +87,8 @@ final class AURequestTracer {
     private var appendedSamples: Int = 0
     private var droppedChunks: Int = 0
     private var droppedSamples: Int = 0
+    private var zeroFilledPulls: Int = 0
+    private var zeroFilledFrames: Int = 0
 
     func begin(generation: UInt64, textLength: Int) {
         if let activeGeneration {
@@ -88,11 +102,15 @@ final class AURequestTracer {
     func end() {
         if let activeGeneration {
             AURequestTrace.requestEnd(generation: activeGeneration)
-            AURequestTrace.requestSummary(generation: activeGeneration,
-                                          appendedChunks: appendedChunks,
-                                          appendedSamples: appendedSamples,
-                                          droppedChunks: droppedChunks,
-                                          droppedSamples: droppedSamples)
+            AURequestTrace.requestSummary(AURequestTrace.Summary(
+                generation: activeGeneration,
+                appendedChunks: appendedChunks,
+                appendedSamples: appendedSamples,
+                droppedChunks: droppedChunks,
+                droppedSamples: droppedSamples,
+                zeroFilledPulls: zeroFilledPulls,
+                zeroFilledFrames: zeroFilledFrames
+            ))
         }
         activeGeneration = nil
         resetCounters()
@@ -134,6 +152,18 @@ final class AURequestTracer {
         AURequestTrace.chunkDroppedEarly(stampedGeneration: stampedGeneration, samples: samples)
     }
 
+    /// A render pull that had to pad with silence because synthesis had
+    /// not produced enough samples in time (issue #94 bug 1 underrun).
+    /// Accumulates into the request summary: a healthy play reports
+    /// zeroFilledPulls=0, and on a device where synthesis runs slower than
+    /// realtime the counts show exactly how starved the request was -
+    /// the replacement signal for the removed "Rendering in progress no
+    /// data" retry log.
+    func underrun(zeroFilledFrames frames: Int) {
+        zeroFilledPulls += 1
+        zeroFilledFrames += frames
+    }
+
     /// A drop counts toward the summary only while the dropped chunk's own
     /// generation is still the active one; chunks racing in after end()
     /// (bug 2's tail) are logged individually but belong to no live request.
@@ -148,6 +178,8 @@ final class AURequestTracer {
         appendedSamples = 0
         droppedChunks = 0
         droppedSamples = 0
+        zeroFilledPulls = 0
+        zeroFilledFrames = 0
     }
 }
 #endif

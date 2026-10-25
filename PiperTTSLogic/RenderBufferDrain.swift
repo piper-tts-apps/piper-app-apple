@@ -48,18 +48,17 @@ extension FloatRingBuffer {
         if zeroFilled > 0 {
             destination.advanced(by: copied).update(repeating: 0, count: zeroFilled)
         }
-        // CHARACTERIZATION BASELINE (pre-fix decision, extracted verbatim in
-        // behaviour): a short pull reports a SHORT byteSize (copied * 4) and
-        // completion never rides along with the final partial chunk - the
-        // host learns about completion from a later empty pull. The
-        // RenderBufferDrainTests contract failures against this body are the
-        // red state for the render-underrun fix.
+        // The full-size guarantee: byteSize always covers the whole frame
+        // range (real samples + silence), never just the copied prefix.
+        // When this pull drained the last samples of a completed synthesis
+        // it is also the final one, so completion rides along with the
+        // render (RHVoice-style) instead of needing a later empty pull.
         return .rendered(
             copied: copied,
             zeroFilled: zeroFilled,
-            byteSize: copied * MemoryLayout<Float>.size,
+            byteSize: frameCount * MemoryLayout<Float>.size,
             remaining: count,
-            isFinal: false
+            isFinal: synthesisCompleted && isEmpty
         )
     }
 }
