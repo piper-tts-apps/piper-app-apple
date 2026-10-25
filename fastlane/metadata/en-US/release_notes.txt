@@ -1,3 +1,2 @@
-- Updated UI: one voice list with search and your installed languages first
-- Added Japanese language support
+- Voices start speaking sooner, especially for longer text
 - Bug fixes and small improvements

@@ -1,3 +1,2 @@
-- Aktualisierte Oberfläche: eine Stimmenliste mit Suche und Ihre installierten Sprachen zuerst
-- Unterstützung für die japanische Sprache hinzugefügt
+- Stimmen beginnen schneller zu sprechen, besonders bei längeren Texten
 - Fehlerbehebungen und kleine Verbesserungen

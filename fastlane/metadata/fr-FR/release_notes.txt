@@ -1,3 +1,2 @@
-- Interface mise à jour : une seule liste de voix avec recherche, vos langues installées en premier
-- Ajout de la prise en charge du japonais
+- Les voix commencent à parler plus tôt, surtout pour les textes plus longs
 - Corrections de bugs et petites améliorations

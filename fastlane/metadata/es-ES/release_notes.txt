@@ -1,3 +1,2 @@
-- Interfaz actualizada: una sola lista de voces con búsqueda y tus idiomas instalados primero
-- Se añadió compatibilidad con el idioma japonés
+- Las voces empiezan a hablar antes, especialmente con textos más largos
 - Correcciones de errores y pequeñas mejoras
