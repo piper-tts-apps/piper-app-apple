@@ -3,6 +3,30 @@
 
 import Foundation
 
+/// The priming cushion a fresh request builds before real samples are
+/// rendered (issue #94 bug 1 follow-up).
+///
+/// Synthesis streams in bursts (whole decoder windows at a time) while
+/// the host drains smoothly, so on a device where synthesis runs at
+/// roughly realtime the buffer grazes empty at chunk boundaries and
+/// every slightly-late window starves a render pull - in the gen=25
+/// device play, 52 zero-filled pulls / 22,759 frames (~1 s) of silence
+/// landed mid-utterance as audible dropouts. While a request is priming,
+/// pulls answer full-size silence WITHOUT consuming the buffer until it
+/// holds `primeDurationSeconds` of audio (or synthesis completes); the
+/// cushion then absorbs the boundary jitter for the rest of the request.
+public enum RenderPriming {
+    /// How much buffered audio ends priming, in seconds of samples at
+    /// the render rate.
+    public static let primeDurationSeconds: Double = 0.5
+
+    /// The priming threshold in frames for a stream at `sampleRate`
+    /// (22050 -> 11025, 16000 -> 8000, 44100 -> 22050).
+    public static func thresholdFrames(sampleRate: Double) -> Int {
+        Int(primeDurationSeconds * sampleRate)
+    }
+}
+
 /// Outcome of a single render pull against the synthesis buffer.
 ///
 /// The render contract (issue #94 bug 1): while a request is active a pull
@@ -15,6 +39,14 @@ public enum RenderDrainOutcome: Equatable {
     /// Synthesis is complete and the buffer is already drained: the caller
     /// signals completion without touching the output buffer.
     case complete
+    /// The request is still priming: the buffer holds less than the
+    /// priming threshold and synthesis is unfinished, so the pull rendered
+    /// a full-size silence (`byteSize` covers the whole frame range) and
+    /// consumed NOTHING. `buffered` is the number of samples waiting in
+    /// the buffer. The request stays priming after this pull; priming
+    /// latches off on the first pull that finds the threshold reached or
+    /// synthesis completed, and that pull drains normally.
+    case primingSilence(byteSize: Int, buffered: Int)
     /// The pull rendered a full-size buffer: `copied` real samples followed
     /// by `zeroFilled` silence frames. `remaining` is the number of samples
     /// left in the buffer after the pull. `isFinal` is true when this pull
@@ -31,14 +63,27 @@ extension FloatRingBuffer {
     /// `synthesisCompleted` is the producer's completion state sampled by
     /// the caller at pull entry; the buffer count is read here, under the
     /// caller's lock, so copy + removeFirst stay one atomic step.
+    ///
+    /// `isPriming` / `primeThresholdFrames` carry the caller's per-request
+    /// priming state (see RenderPriming): while priming, a pull that finds
+    /// less than the threshold buffered (and synthesis unfinished) answers
+    /// `.primingSilence` instead of draining. The default disables priming
+    /// for callers that do not model the request lifecycle.
     public mutating func drainForRender(
         into destination: UnsafeMutablePointer<Float>,
         frameCount: Int,
-        synthesisCompleted: Bool
+        synthesisCompleted: Bool,
+        isPriming: Bool = false,
+        primeThresholdFrames: Int = 0
     ) -> RenderDrainOutcome {
         if synthesisCompleted && isEmpty {
             return .complete
         }
+        // STAGED: the priming inputs are accepted but the priming decision
+        // is not implemented yet - every pull drains exactly as before, so
+        // the priming contract tests are red against this version. The
+        // decision lands in the follow-up commit together with the
+        // AudioUnit wiring.
         let copied = min(count, frameCount)
         if copied > 0 {
             copyFirst(into: destination, count: copied)

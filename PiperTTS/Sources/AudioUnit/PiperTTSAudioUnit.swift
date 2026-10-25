@@ -132,12 +132,15 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
             actionFlags.pointee = .offlineUnitRenderAction_Complete
             self.cleanUp()
             return noErr
+        case let .primingSilence(byteSize, _):
+            // Not reachable yet: the drain's priming decision lands with
+            // the AudioUnit wiring in the follow-up commit. Answer with
+            // the same full-size silence contract as a starved render.
+            setRenderedByteSize(outputAudioBufferList, bufferList, byteSize: byteSize)
+            actionFlags.pointee = .offlineUnitRenderAction_Render
+            return noErr
         case let .rendered(copied, zeroFilled, byteSize, remaining, isFinal):
-            outputAudioBufferList.pointee.mNumberBuffers = 1
-            var renderedBuffer = bufferList[0]
-            renderedBuffer.mNumberChannels = 1
-            renderedBuffer.mDataByteSize = UInt32(byteSize)
-            bufferList[0] = renderedBuffer
+            setRenderedByteSize(outputAudioBufferList, bufferList, byteSize: byteSize)
 #if DEBUG
             if zeroFilled > 0 {
                 requestTracer.underrun(zeroFilledFrames: zeroFilled)
@@ -152,6 +155,22 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
             }
             return noErr
         }
+    }
+
+    /// Points the single output buffer at `byteSize` bytes. Every render
+    /// the unit returns - a real drain or priming silence - is full-size:
+    /// a short byteSize is the echo trigger (issue #94 bug 1), so this is
+    /// the one place the buffer descriptor is written.
+    private func setRenderedByteSize(
+        _ outputAudioBufferList: UnsafeMutablePointer<AudioBufferList>,
+        _ bufferList: UnsafeMutableAudioBufferListPointer,
+        byteSize: Int
+    ) {
+        outputAudioBufferList.pointee.mNumberBuffers = 1
+        var renderedBuffer = bufferList[0]
+        renderedBuffer.mNumberChannels = 1
+        renderedBuffer.mDataByteSize = UInt32(byteSize)
+        bufferList[0] = renderedBuffer
     }
 
     public override func synthesizeSpeechRequest(_ speechRequest: AVSpeechSynthesisProviderRequest) {
