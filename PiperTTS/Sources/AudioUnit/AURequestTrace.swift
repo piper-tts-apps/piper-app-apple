@@ -61,12 +61,15 @@ enum AURequestTrace {
         let droppedSamples: Int
         let zeroFilledPulls: Int
         let zeroFilledFrames: Int
+        let primingPulls: Int
+        let primingFrames: Int
     }
 
     static func requestSummary(_ summary: Summary) {
-        os_log("request summary gen=%{public}llu appendedChunks=%{public}ld appendedSamples=%{public}ld droppedChunks=%{public}ld droppedSamples=%{public}ld zeroFilledPulls=%{public}ld zeroFilledFrames=%{public}ld",
+        os_log("request summary gen=%{public}llu appendedChunks=%{public}ld appendedSamples=%{public}ld droppedChunks=%{public}ld droppedSamples=%{public}ld zeroFilledPulls=%{public}ld zeroFilledFrames=%{public}ld primingPulls=%{public}ld primingFrames=%{public}ld",
                log: log, type: .default, summary.generation, summary.appendedChunks, summary.appendedSamples,
-               summary.droppedChunks, summary.droppedSamples, summary.zeroFilledPulls, summary.zeroFilledFrames)
+               summary.droppedChunks, summary.droppedSamples, summary.zeroFilledPulls, summary.zeroFilledFrames,
+               summary.primingPulls, summary.primingFrames)
     }
 
     static func renderResourcesAllocated() {
@@ -89,6 +92,8 @@ final class AURequestTracer {
     private var droppedSamples: Int = 0
     private var zeroFilledPulls: Int = 0
     private var zeroFilledFrames: Int = 0
+    private var primingPulls: Int = 0
+    private var primingFrames: Int = 0
 
     func begin(generation: UInt64, textLength: Int) {
         if let activeGeneration {
@@ -109,7 +114,9 @@ final class AURequestTracer {
                 droppedChunks: droppedChunks,
                 droppedSamples: droppedSamples,
                 zeroFilledPulls: zeroFilledPulls,
-                zeroFilledFrames: zeroFilledFrames
+                zeroFilledFrames: zeroFilledFrames,
+                primingPulls: primingPulls,
+                primingFrames: primingFrames
             ))
         }
         activeGeneration = nil
@@ -164,6 +171,17 @@ final class AURequestTracer {
         zeroFilledFrames += frames
     }
 
+    /// A render pull answered with silence while the request was still
+    /// priming (building its 0.5 s cushion - see RenderPriming).
+    /// Accumulated separately from the underrun counters above: priming
+    /// silence is deliberate and precedes the speech, and its size in
+    /// the summary prices the cushion against the mid-utterance
+    /// starvation it absorbed (zeroFilledPulls should fall to ~0).
+    func priming(frames: Int) {
+        primingPulls += 1
+        primingFrames += frames
+    }
+
     /// A drop counts toward the summary only while the dropped chunk's own
     /// generation is still the active one; chunks racing in after end()
     /// (bug 2's tail) are logged individually but belong to no live request.
@@ -180,6 +198,8 @@ final class AURequestTracer {
         droppedSamples = 0
         zeroFilledPulls = 0
         zeroFilledFrames = 0
+        primingPulls = 0
+        primingFrames = 0
     }
 }
 #endif

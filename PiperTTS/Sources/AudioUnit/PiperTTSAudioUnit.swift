@@ -21,6 +21,13 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     private var outputDataLock = os_unfair_lock_s()
     internal var outputData = FloatRingBuffer()
 
+    /// Priming cushion state for the active request (issue #94 bug 1
+    /// follow-up), guarded by outputDataLock: while `isPriming` holds,
+    /// pulls answer silence without consuming until the buffer reaches
+    /// `primeThresholdFrames` (see RenderPriming); reset at request begin and in removeRequestAndCleanOutputData (cleanUp).
+    private var isPriming = true
+    private var primeThresholdFrames = 0
+
     private let requestGate = RequestGenerationGate()
     /// Generation of the request currently being synthesized. Guarded by outputDataLock.
     private var activeGeneration: UInt64 = 0
@@ -121,9 +128,9 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         // trigger. A starved pull now renders full-size silence instead;
         // the drain contract lives in PiperTTSLogic (RenderDrainOutcome).
         os_unfair_lock_lock(&outputDataLock)
-        let outcome = outputData.drainForRender(
-            into: frames, frameCount: intFrameCount, synthesisCompleted: synthesisCompleted
-        )
+        let thresholdAtPull = primeThresholdFrames
+        let outcome = outputData.drainForRender(into: frames, frameCount: intFrameCount, synthesisCompleted: synthesisCompleted, isPriming: isPriming, primeThresholdFrames: thresholdAtPull)
+        isPriming = outcome.isPrimingPull
         os_unfair_lock_unlock(&outputDataLock)
 
         switch outcome {
@@ -132,15 +139,18 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
             actionFlags.pointee = .offlineUnitRenderAction_Complete
             self.cleanUp()
             return noErr
-        case let .primingSilence(byteSize, _):
-            // Not reachable yet: the drain's priming decision lands with
-            // the AudioUnit wiring in the follow-up commit. Answer with
-            // the same full-size silence contract as a starved render.
-            setRenderedByteSize(outputAudioBufferList, bufferList, byteSize: byteSize)
+        case let .primingSilence(byteSize, buffered):
+            // Still building the cushion: full-size silence, nothing
+            // consumed - priming in the summary, never underrun.
+            setRenderedByteSize(outputAudioBufferList, byteSize: byteSize)
+#if DEBUG
+            requestTracer.priming(frames: intFrameCount)
+            Log.debug(type: .synthesizer, "Priming: buffered \(buffered) of \(thresholdAtPull) frames. Rendered silence.")
+#endif
             actionFlags.pointee = .offlineUnitRenderAction_Render
             return noErr
         case let .rendered(copied, zeroFilled, byteSize, remaining, isFinal):
-            setRenderedByteSize(outputAudioBufferList, bufferList, byteSize: byteSize)
+            setRenderedByteSize(outputAudioBufferList, byteSize: byteSize)
 #if DEBUG
             if zeroFilled > 0 {
                 requestTracer.underrun(zeroFilledFrames: zeroFilled)
@@ -158,15 +168,11 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     }
 
     /// Points the single output buffer at `byteSize` bytes. Every render
-    /// the unit returns - a real drain or priming silence - is full-size:
-    /// a short byteSize is the echo trigger (issue #94 bug 1), so this is
-    /// the one place the buffer descriptor is written.
-    private func setRenderedByteSize(
-        _ outputAudioBufferList: UnsafeMutablePointer<AudioBufferList>,
-        _ bufferList: UnsafeMutableAudioBufferListPointer,
-        byteSize: Int
-    ) {
+    /// is full-size: a short byteSize is the echo trigger (issue #94
+    /// bug 1), so this is the one place the descriptor is written.
+    private func setRenderedByteSize(_ outputAudioBufferList: UnsafeMutablePointer<AudioBufferList>, byteSize: Int) {
         outputAudioBufferList.pointee.mNumberBuffers = 1
+        let bufferList = UnsafeMutableAudioBufferListPointer(outputAudioBufferList)
         var renderedBuffer = bufferList[0]
         renderedBuffer.mNumberChannels = 1
         renderedBuffer.mDataByteSize = UInt32(byteSize)
@@ -184,6 +190,8 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         os_unfair_lock_lock(&outputDataLock)
         self.request = speechRequest
         self.activeGeneration = generation
+        self.isPriming = true
+        self.primeThresholdFrames = RenderPriming.thresholdFrames(sampleRate: format.sampleRate)
         os_unfair_lock_unlock(&outputDataLock)
         createPiperIfNeeded(voiceIdentifier: speechRequest.voice.identifier)
 #if DEBUG
@@ -214,6 +222,8 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         os_unfair_lock_lock(&outputDataLock)
         request = nil
         outputData.clear()
+        isPriming = true
+        primeThresholdFrames = 0
         os_unfair_lock_unlock(&outputDataLock)
         piper?.cancel()
     }

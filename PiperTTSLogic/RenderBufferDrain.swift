@@ -56,6 +56,19 @@ public enum RenderDrainOutcome: Equatable {
     case rendered(copied: Int, zeroFilled: Int, byteSize: Int, remaining: Int, isFinal: Bool)
 }
 
+extension RenderDrainOutcome {
+    /// Whether the request is still priming after this pull: only a
+    /// priming-silence pull leaves priming engaged; any other outcome
+    /// means it latched off (or the request ended). The AudioUnit stores
+    /// this back into its per-request priming flag.
+    public var isPrimingPull: Bool {
+        if case .primingSilence = self {
+            return true
+        }
+        return false
+    }
+}
+
 extension FloatRingBuffer {
     /// Drains up to `frameCount` samples into `destination`, zero-filling
     /// the rest of the frame range, and reports exactly what the pull did.
@@ -79,11 +92,17 @@ extension FloatRingBuffer {
         if synthesisCompleted && isEmpty {
             return .complete
         }
-        // STAGED: the priming inputs are accepted but the priming decision
-        // is not implemented yet - every pull drains exactly as before, so
-        // the priming contract tests are red against this version. The
-        // decision lands in the follow-up commit together with the
-        // AudioUnit wiring.
+        if isPriming && !synthesisCompleted && count < primeThresholdFrames {
+            // Priming: the cushion has not been reached, so hold every
+            // buffered sample and answer the whole frame range with
+            // silence. Nothing is consumed - when the threshold is
+            // reached (or synthesis completes), the latching pull starts
+            // draining from the very first sample.
+            destination.update(repeating: 0, count: frameCount)
+            return .primingSilence(
+                byteSize: frameCount * MemoryLayout<Float>.size, buffered: count
+            )
+        }
         let copied = min(count, frameCount)
         if copied > 0 {
             copyFirst(into: destination, count: copied)
