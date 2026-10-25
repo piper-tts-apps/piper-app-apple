@@ -4,12 +4,11 @@
 import XCTest
 @testable import PiperTTSLogic
 
-/// Issue #94 bug 1 follow-up - priming lifecycle and accounting,
-/// driven through FloatRingBuffer.drainForRender the way
-/// PiperTTSAudioUnit drives it: an isPriming flag passed into every
-/// pull, cleared by any outcome that is not .primingSilence, reset at
-/// request begin. See RenderBufferDrainPrimingTests for the pull-level
-/// contract and the device evidence behind the cushion.
+/// Priming lifecycle and accounting, driven through
+/// FloatRingBuffer.drainForRender the way PiperTTSAudioUnit drives it:
+/// an isPriming flag passed into every pull, cleared by any outcome
+/// that is not .primingSilence, reset at request begin. See
+/// RenderBufferDrainPrimingTests for the pull-level contract.
 final class RenderBufferDrainPrimingLifecycleTests: XCTestCase {
 
     // MARK: - Helpers
@@ -209,9 +208,9 @@ final class RenderBufferDrainPrimingLifecycleTests: XCTestCase {
     }
 
     func testPrimeThresholdConversion() {
-        XCTAssertEqual(RenderPriming.primeDurationSeconds, 0.5)
-        XCTAssertEqual(RenderPriming.thresholdFrames(sampleRate: 22050), 11025)
-        XCTAssertEqual(RenderPriming.thresholdFrames(sampleRate: 16000), 8000)
-        XCTAssertEqual(RenderPriming.thresholdFrames(sampleRate: 44100), 22050)
+        XCTAssertEqual(RenderPriming.primeDurationSeconds, 0.0125)
+        XCTAssertEqual(RenderPriming.thresholdFrames(sampleRate: 22050), 275)
+        XCTAssertEqual(RenderPriming.thresholdFrames(sampleRate: 16000), 200)
+        XCTAssertEqual(RenderPriming.thresholdFrames(sampleRate: 44100), 551)
     }
 }

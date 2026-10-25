@@ -4,24 +4,23 @@
 import XCTest
 @testable import PiperTTSLogic
 
-/// Issue #94 bug 1 follow-up - the priming cushion, pinned at the same
-/// drain seam as RenderBufferDrainTests (FloatRingBuffer.drainForRender).
+/// The priming cushion, pinned at the same drain seam as
+/// RenderBufferDrainTests (FloatRingBuffer.drainForRender).
 ///
-/// On Ihor's phone HIGH synthesis runs at ~realtime with jitter, so even
-/// with the full-size render contract the buffer drained to exactly 0 at
-/// most chunk boundaries and 52 pulls padded silence mid-utterance
-/// (gen=25 device summary: zeroFilledFrames=22,759, ~1 s). While a
-/// request is priming, pulls answer full-size silence WITHOUT consuming
-/// until 0.5 s of audio is buffered (or synthesis completes); the
-/// cushion then absorbs the boundary jitter.
+/// On devices where synthesis runs at ~realtime with jitter, even with
+/// the full-size render contract the buffer drains to exactly 0 at
+/// chunk boundaries and pulls pad silence mid-utterance as audible
+/// dropouts. While a request is priming, pulls answer full-size
+/// silence WITHOUT consuming until the priming threshold of audio is
+/// buffered (or synthesis completes); the cushion then absorbs the
+/// boundary jitter.
 ///
 /// The AudioUnit's part is an isPriming flag per request (reset at
 /// request begin and on cleanUp) and a threshold computed from the
 /// output format's sample rate at request begin; these tests drive the
 /// seam with exactly that bookkeeping. Fidelity boundary as in
-/// RenderBufferDrainTests: PiperTests cannot link the extension target,
-/// so the wiring is verified by the device protocol (request summary
-/// primingPulls / primingFrames vs zeroFilledPulls).
+/// RenderBufferDrainTests: PiperTests cannot link the extension
+/// target, so the AudioUnit wiring itself is not under test here.
 final class RenderBufferDrainPrimingTests: XCTestCase {
 
     // MARK: - Helpers

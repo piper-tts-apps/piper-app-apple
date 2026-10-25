@@ -4,29 +4,23 @@
 import XCTest
 @testable import PiperTTSLogic
 
-/// Issue #94 bug 1 - HIGH voices echo on devices where synthesis runs
-/// slower than realtime.
+/// The render-drain contract, pinned at the seam the AudioUnit's
+/// render block is built on (FloatRingBuffer.drainForRender): a pull
+/// during an active request ALWAYS returns a full-size render
+/// immediately - real samples first, silence for the shortfall - and
+/// completion is signalled exactly once.
 ///
-/// The old doPerformRender answered a starved pull by BLOCKING the render
-/// thread in pauseUntil (up to 2 s per pull, pumping a run loop) and
-/// recursing up to 400 deep; when the retries exhausted it returned a
-/// SHORT buffer (mDataByteSize below the requested frame count) with a
-/// plain Render flag. The host's reaction to those short/stalled renders
-/// is the echo's trigger: 39 "Rendering in progress no data" retries fired
-/// inside a single traced play whose own sample accounting was exact.
-///
-/// These tests pin the replacement contract at the drain seam
-/// (FloatRingBuffer.drainForRender), the decision the AudioUnit's render
-/// block is built on: a pull during an active request ALWAYS returns a
-/// full-size render immediately - real samples first, silence for the
-/// shortfall - and completion is signalled exactly once.
+/// The contract exists because the previous render path answered a
+/// starved pull by waiting on the render thread and then returning a
+/// short buffer (mDataByteSize below the requested frame count); a host
+/// that re-pulls the same timestamp in response doubles the audio,
+/// which is the echo heard on devices where synthesis runs near
+/// realtime.
 ///
 /// Fidelity boundary: PiperTests cannot link the PiperTTS extension
-/// target, so the AudioUnit's flag/byteSize wiring is not under test here;
-/// the drain outcome carries byteSize and isFinal precisely so the whole
-/// decision is. The wiring is verified by the device protocol (no
-/// "Rendering in progress no data" lines, request summary underrun
-/// counts, no echo).
+/// target, so the AudioUnit's flag/byteSize wiring is not under test
+/// here; the drain outcome carries byteSize and isFinal precisely so
+/// the whole decision is.
 final class RenderBufferDrainTests: XCTestCase {
 
     // MARK: - Helpers
@@ -87,8 +81,8 @@ final class RenderBufferDrainTests: XCTestCase {
     }
 
     func testUnderrunAccountingMatchesShortfall() {
-        // The numbers the AURequestTrace summary accumulates per pull:
-        // zeroFilledFrames must equal frameCount - available, exactly.
+        // The underrun accounting a caller accumulates per pull:
+        // zeroFilled must equal frameCount - available, exactly.
         var ring = FloatRingBuffer()
         ring.append(contentsOf: [Float](repeating: 0.5, count: 100))
         var outcome: RenderDrainOutcome?
