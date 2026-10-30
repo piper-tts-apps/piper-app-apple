@@ -16,26 +16,49 @@ struct LanguageVoicesView: View {
         hostModel.voices(for: languageCode)
     }
 
+    /// Installed voices of this language with no catalog entry
+    /// (imported / own trained voices): without these rows they
+    /// counted in Installed languages but could not be opened.
+    private var installedOnly: [FileManager.ModelPaths] {
+        hostModel.installedOnlyModels(for: languageCode)
+    }
+
     var body: some View {
         List {
-            if voices.isEmpty {
+            if voices.isEmpty && installedOnly.isEmpty {
                 Text("no_voices")
                     .font(.title2)
             } else {
-                Section {
-                    Text("warning_not_tested_voices")
-                        .font(.title2)
-                        .accessibilityHidden(false)
-                }
-                Section {
-                    ForEach(voices, id: \.key) { voice in
-                        VoiceRowView(hostModel: hostModel, voice: voice)
+                if !voices.isEmpty {
+                    Section {
+                        Text("warning_not_tested_voices")
+                            .font(.title2)
+                            .accessibilityHidden(false)
+                    }
+                    Section {
+                        ForEach(voices, id: \.key) { voice in
+                            VoiceRowView(hostModel: hostModel, voice: voice)
+                        }
+                    }
+                    Section {
+                        Text("warning_big_voice_files")
+                            .font(.title2)
+                            .accessibilityHidden(false)
                     }
                 }
-                Section {
-                    Text("warning_big_voice_files")
-                        .font(.title2)
-                        .accessibilityHidden(false)
+                if !installedOnly.isEmpty {
+                    Section {
+                        ForEach(installedOnly, id: \.info?.voiceId) { model in
+                            NavigationLink {
+                                VoiceView(hostModel: VoiceHostModel(piper: hostModel.piper,
+                                                                    modelPaths: model,
+                                                                    delegate: hostModel))
+                            } label: {
+                                Text(model.modelTitle)
+                                    .font(.title2)
+                            }
+                        }
+                    }
                 }
             }
         }

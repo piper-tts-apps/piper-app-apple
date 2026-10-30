@@ -118,15 +118,56 @@ class MainHostModel: @unchecked Sendable, ObservableObject {
     /// else the catalog's only language with the same family (a config
     /// that ships just "uk" still finds "uk_UA").
     func resolvedLanguageCode(for code: String) -> String {
-        let canonical = Self.canonicalLanguageCode(code)
-        if languages[canonical] != nil {
+        Self.resolvedLanguageCode(for: code, catalogLanguageCodes: Set(languages.keys))
+    }
+
+    static func resolvedLanguageCode(for code: String,
+                                     catalogLanguageCodes: Set<String>) -> String {
+        let canonical = canonicalLanguageCode(code)
+        if catalogLanguageCodes.contains(canonical) {
             return canonical
         }
         let family = canonical.split(separator: "_").first.map(String.init) ?? canonical
-        let matches = languages.keys.filter { key in
+        let matches = catalogLanguageCodes.filter { key in
             return key.split(separator: "_").first.map(String.init) == family
         }
-        return matches.count == 1 ? matches[0] : canonical
+        return matches.count == 1 ? matches.first ?? canonical : canonical
+    }
+
+    /// Installed voices of one language that have no catalog row.
+    /// Since #68 the per-language list only renders catalog voices,
+    /// so an imported voice (a config whose name is not a catalog
+    /// entry) counted in Installed languages but had no row to tap.
+    /// These are exactly the voices the per-language list must also
+    /// render, as installed-only rows to their detail screen.
+    /// Voices without a parseable language stay ungrouped on the
+    /// main screen, as before, and are not repeated here.
+    func installedOnlyModels(for languageCode: String) -> [FileManager.ModelPaths] {
+        Self.installedOnlyModels(for: languageCode,
+                                 installed: piper.installedVoices,
+                                 catalogVoices: voices(for: languageCode),
+                                 catalogLanguageCodes: Set(languages.keys))
+    }
+
+    static func installedOnlyModels(for languageCode: String,
+                                    installed: [FileManager.ModelPaths],
+                                    catalogVoices: [Voice],
+                                    catalogLanguageCodes: Set<String>) -> [FileManager.ModelPaths] {
+        let matched = Set(catalogVoices.compactMap { voice in
+            VoiceItemHostModel.installedPaths(for: voice, in: installed)
+        })
+        return installed.filter { model in
+            guard let code = model.info?.language.code else {
+                return false
+            }
+            guard resolvedLanguageCode(for: code,
+                                       catalogLanguageCodes: catalogLanguageCodes) == languageCode else {
+                return false
+            }
+            return !matched.contains(model)
+        }.sorted(by: { model1, model2 in
+            return model1.modelTitle < model2.modelTitle
+        })
     }
 
     func installedPaths(for voice: Voice) -> FileManager.ModelPaths? {
