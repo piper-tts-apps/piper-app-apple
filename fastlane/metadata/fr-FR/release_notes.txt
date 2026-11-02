@@ -1,2 +1,1 @@
-- Les voix commencent à parler plus tôt, surtout pour les textes plus longs
 - Corrections de bugs et petites améliorations

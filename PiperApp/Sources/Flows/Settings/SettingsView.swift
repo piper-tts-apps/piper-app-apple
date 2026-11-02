@@ -8,7 +8,7 @@ struct SettingsView: View {
 
     @StateObject var hostModel: SettingsHostModel
     @AppStorage(ModelFormat.userDefaultsKey) private var modelFormat: ModelFormat = .standard
-    @AppStorage(StreamingVoices.userDefaultsKey) private var streamingVoices: Bool = true
+    @AppStorage(StreamingVoices.userDefaultsKey) private var streamingVoices: Bool = false
 
 #if os(iOS)
     private let platform = "iOS"

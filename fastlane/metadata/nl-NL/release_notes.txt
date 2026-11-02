@@ -1,2 +1,1 @@
-- Stemmen beginnen sneller te spreken, vooral bij langere teksten
 - Bugfixes en kleine verbeteringen

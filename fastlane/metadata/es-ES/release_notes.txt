@@ -1,2 +1,1 @@
-- Las voces empiezan a hablar antes, especialmente con textos más largos
 - Correcciones de errores y pequeñas mejoras

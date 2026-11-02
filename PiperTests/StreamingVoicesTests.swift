@@ -33,11 +33,12 @@ final class StreamingVoicesTests: XCTestCase {
 
     // MARK: - Store
 
-    func testEnabledByDefaultWhenKeyAbsent() {
-        // Default ON with no stored value: fresh installs stream
-        // without any migration ever writing the key.
+    func testDisabledByDefaultWhenKeyAbsent() {
+        // Default OFF with no stored value: fresh installs use
+        // classic downloads unless the user opts in, with no
+        // migration ever writing the key.
         setStreaming(nil)
-        XCTAssertTrue(StreamingVoices.isEnabled)
+        XCTAssertFalse(StreamingVoices.isEnabled)
     }
 
     func testExplicitOffPersists() {
@@ -100,11 +101,13 @@ final class StreamingVoicesTests: XCTestCase {
         XCTAssertEqual(voice.voiceSize, 15000000 + 16956298 + 4875)
     }
 
-    func testSplitSelectedByDefault() throws {
-        // The absent-key default (ON) selects the split layout too.
+    func testSplitNotSelectedByDefault() throws {
+        // The absent-key default (OFF) does not select the split
+        // layout: displayed size falls back to the classic total.
         setStreaming(nil)
         let voice = try JSONDecoder().decode(Voice.self, from: splitJSON)
-        XCTAssertNotNil(voice.selectedSplit)
+        XCTAssertNil(voice.selectedSplit)
+        XCTAssertEqual(voice.voiceSize, 31951473 + 4875)
     }
 
     func testSplitNotSelectedWhenStreamingOff() throws {
