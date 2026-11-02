@@ -103,7 +103,10 @@ class MainHostModel: @unchecked Sendable, ObservableObject {
         viewModel = updated
     }
 
-    func voices(for languageCode: String) -> [Voice] {
+    /// Catalog voices of one language, without any installed-only
+    /// rows. Kept separate from `voices(for:)` so the installed-only
+    /// dedup below does not recurse through the merged list.
+    func catalogVoices(for languageCode: String) -> [Voice] {
         return languages[languageCode]?
             .filter { voice in
                 return voice.isSupported
@@ -111,6 +114,33 @@ class MainHostModel: @unchecked Sendable, ObservableObject {
             .sorted(by: { voice1, voice2 in
                 return voice1.name < voice2.name
             }) ?? []
+    }
+
+    /// The single list for one language: its catalog voices plus
+    /// its installed-only voices, as synthetic `Voice` rows, sorted
+    /// together by name (then quality, for voices sharing a name).
+    /// The per-language view renders exactly this list, in one
+    /// section, instead of a catalog section plus a separate
+    /// installed-only section.
+    func voices(for languageCode: String) -> [Voice] {
+        return Self.mergedVoices(catalogVoices: catalogVoices(for: languageCode),
+                                 installedOnly: installedOnlyModels(for: languageCode))
+    }
+
+    /// Merges catalog voices with already-deduped installed-only
+    /// models, as a static helper so the merge and its sort order
+    /// are testable without a `MainHostModel` instance.
+    static func mergedVoices(catalogVoices: [Voice],
+                             installedOnly: [FileManager.ModelPaths]) -> [Voice] {
+        let installed = installedOnly.compactMap { model in
+            model.info?.installedVoice(paths: model)
+        }
+        return (catalogVoices + installed).sorted(by: { voice1, voice2 in
+            if voice1.name != voice2.name {
+                return voice1.name < voice2.name
+            }
+            return voice1.quality < voice2.quality
+        })
     }
 
     /// Maps an installed language group to the catalog key its voices
@@ -145,7 +175,7 @@ class MainHostModel: @unchecked Sendable, ObservableObject {
     func installedOnlyModels(for languageCode: String) -> [FileManager.ModelPaths] {
         Self.installedOnlyModels(for: languageCode,
                                  installed: piper.installedVoices,
-                                 catalogVoices: voices(for: languageCode),
+                                 catalogVoices: catalogVoices(for: languageCode),
                                  catalogLanguageCodes: Set(languages.keys))
     }
 

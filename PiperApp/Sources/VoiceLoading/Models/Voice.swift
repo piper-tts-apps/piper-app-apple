@@ -31,6 +31,32 @@ class Voice: Decodable {
     /// would corrupt both.
     let split: VoiceSplit?
 
+    /// Builds a voice without decoding a catalog entry. Used for
+    /// installed-only voices, which have a model config but no
+    /// catalog row. This does not replace the synthesized
+    /// `init(from:)`: catalog entries still decode as before.
+    init(key: String,
+         name: String,
+         quality: String,
+         language: PiperAppUtils.Language,
+         files: [String: VoiceFile],
+         license: String? = nil,
+         modelLicense: String? = nil,
+         trainingData: TrainingData? = nil,
+         variants: [String: VoiceVariant]? = nil,
+         split: VoiceSplit? = nil) {
+        self.key = key
+        self.name = name
+        self.quality = quality
+        self.language = language
+        self.files = files
+        self.license = license
+        self.modelLicense = modelLicense
+        self.trainingData = trainingData
+        self.variants = variants
+        self.split = split
+    }
+
     struct VoiceVariant: Decodable {
         let model: String
         let sizeBytes: Int

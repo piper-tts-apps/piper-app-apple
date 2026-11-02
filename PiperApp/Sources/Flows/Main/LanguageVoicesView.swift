@@ -7,6 +7,12 @@ import PiperAppUtils
 /// The voices of one language, pushed both from the "Languages"
 /// list and from the "Installed languages" section of the main
 /// screen - the same list either way.
+///
+/// `voices` is the merged list: catalog voices plus installed-only
+/// voices as synthetic `Voice` rows, sorted together. Installed-only
+/// voices (imported / own trained voices) therefore appear in the
+/// same section as catalog voices, instead of a separate section,
+/// and their rows navigate to the same detail screen.
 struct LanguageVoicesView: View {
 
     @ObservedObject var hostModel: MainHostModel
@@ -16,49 +22,26 @@ struct LanguageVoicesView: View {
         hostModel.voices(for: languageCode)
     }
 
-    /// Installed voices of this language with no catalog entry
-    /// (imported / own trained voices): without these rows they
-    /// counted in Installed languages but could not be opened.
-    private var installedOnly: [FileManager.ModelPaths] {
-        hostModel.installedOnlyModels(for: languageCode)
-    }
-
     var body: some View {
         List {
-            if voices.isEmpty && installedOnly.isEmpty {
+            if voices.isEmpty {
                 Text("no_voices")
                     .font(.title2)
             } else {
-                if !voices.isEmpty {
-                    Section {
-                        Text("warning_not_tested_voices")
-                            .font(.title2)
-                            .accessibilityHidden(false)
-                    }
-                    Section {
-                        ForEach(voices, id: \.key) { voice in
-                            VoiceRowView(hostModel: hostModel, voice: voice)
-                        }
-                    }
-                    Section {
-                        Text("warning_big_voice_files")
-                            .font(.title2)
-                            .accessibilityHidden(false)
+                Section {
+                    Text("warning_not_tested_voices")
+                        .font(.title2)
+                        .accessibilityHidden(false)
+                }
+                Section {
+                    ForEach(voices, id: \.key) { voice in
+                        VoiceRowView(hostModel: hostModel, voice: voice)
                     }
                 }
-                if !installedOnly.isEmpty {
-                    Section {
-                        ForEach(installedOnly, id: \.info?.voiceId) { model in
-                            NavigationLink {
-                                VoiceView(hostModel: VoiceHostModel(piper: hostModel.piper,
-                                                                    modelPaths: model,
-                                                                    delegate: hostModel))
-                            } label: {
-                                Text(model.modelTitle)
-                                    .font(.title2)
-                            }
-                        }
-                    }
+                Section {
+                    Text("warning_big_voice_files")
+                        .font(.title2)
+                        .accessibilityHidden(false)
                 }
             }
         }

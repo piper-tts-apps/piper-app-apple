@@ -116,4 +116,51 @@ final class InstalledOnlyVoicesTests: XCTestCase {
                                                        catalogLanguageCodes: ["pl_PL"])
         XCTAssertTrue(result.isEmpty)
     }
+
+    func testInstalledVoiceMapsModelInfoToVoice() throws {
+        let custom = try XCTUnwrap(makeModel(dataset: "my-voice",
+                                             code: "pl_PL",
+                                             family: "pl",
+                                             region: "PL",
+                                             quality: "medium"))
+        let info = try XCTUnwrap(custom.info)
+        let voice = info.installedVoice(paths: custom)
+        XCTAssertEqual(voice.key, "installed:\(info.voiceId)")
+        XCTAssertEqual(voice.name, "my-voice")
+        XCTAssertEqual(voice.quality, "medium")
+        XCTAssertEqual(voice.language.code, "pl_PL")
+        XCTAssertNotNil(voice.files[custom.model.lastPathComponent])
+        XCTAssertNotNil(voice.files[custom.json.lastPathComponent])
+    }
+
+    func testInstalledVoiceIsRecognisedAsInstalled() throws {
+        let custom = try XCTUnwrap(makeModel(dataset: "my-voice",
+                                             code: "pl_PL",
+                                             family: "pl",
+                                             region: "PL",
+                                             quality: "medium"))
+        let voice = try XCTUnwrap(custom.info).installedVoice(paths: custom)
+        let matched = VoiceItemHostModel.installedPaths(for: voice, in: [custom])
+        XCTAssertEqual(matched?.model.path, custom.model.path)
+    }
+
+    func testMergedVoicesSortsCatalogAndInstalledTogether() throws {
+        let custom = try XCTUnwrap(makeModel(dataset: "aaa-voice",
+                                             code: "pl_PL",
+                                             family: "pl",
+                                             region: "PL",
+                                             quality: "medium"))
+        let catalog = try catalogVoice(key: "pl_PL-glos-medium",
+                                       name: "glos",
+                                       quality: "medium",
+                                       code: "pl_PL")
+        let merged = MainHostModel.mergedVoices(catalogVoices: [catalog],
+                                                installedOnly: [custom])
+        // The installed voice sorts before the catalog voice even
+        // though the catalog list was the first input: the merged
+        // list is sorted, not just catalog-then-installed.
+        XCTAssertEqual(merged.map { $0.key },
+                       [try XCTUnwrap(custom.info).installedVoice(paths: custom).key,
+                        catalog.key])
+    }
 }
