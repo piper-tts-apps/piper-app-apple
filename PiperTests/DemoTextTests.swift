@@ -66,8 +66,27 @@ final class DemoTextTests: XCTestCase {
     }
 
     func testNoSampleForLanguageReturnsNil() {
-        let lang = language(code: "ko_KR", family: "ko", region: "KR")
+        let lang = language(code: "xx_XX", family: "xx", region: "XX")
         XCTAssertNil(DemoText.sampleText(in: samples, for: lang))
+    }
+
+    /// The bundled `Samples` asset itself: the languages added in
+    /// Nov 2026 (including Indonesian, and the corrected Malayalam
+    /// text that used to carry the Indonesian sentence) must resolve
+    /// to their own sample, never the English default, and Malayalam
+    /// must no longer equal the Indonesian sample.
+    func testBundledNewSamplesResolve() throws {
+        let dataAsset = NSDataAsset(name: "Samples")
+        try XCTSkipUnless(dataAsset != nil, "Samples asset not available in this test host")
+        let samples = try JSONDecoder().decode([String: String].self, from: XCTUnwrap(dataAsset?.data))
+        for code in ["bn_BD", "et_EE", "eu_ES", "he_IL", "hy_AM", "id_ID",
+                     "ko_KR", "ku_TR", "ml_IN", "mr_IN", "sq_AL", "th_TH"] {
+            let parts = code.split(separator: "_")
+            let lang = language(code: code, family: String(parts[0]), region: String(parts[1]))
+            XCTAssertEqual(DemoText.sampleText(in: samples, for: lang), samples[code])
+        }
+        XCTAssertNotEqual(samples["ml_IN"], samples["id_ID"])
+        XCTAssertTrue(samples["ml_IN"]?.contains("മഴവില്ല്") ?? false)
     }
 
     /// The bundled `Samples` asset itself: every Spanish voice in the
