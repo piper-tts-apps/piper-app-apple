@@ -187,8 +187,38 @@ final class VoiceDecodingTests: XCTestCase {
     }
 
     func testSplitEntryVoiceSizeIsPairPlusConfig() throws {
+        // voiceSize follows the selected layout, not just the split
+        // field: pair-plus-config only when streaming is enabled.
+        // With the default now OFF, this test must opt in
+        // explicitly instead of relying on the old default ON.
+        let savedValue = UserDefaults.standard.object(forKey: StreamingVoices.userDefaultsKey)
+        UserDefaults.standard.set(true, forKey: StreamingVoices.userDefaultsKey)
+        defer {
+            if let savedValue {
+                UserDefaults.standard.set(savedValue, forKey: StreamingVoices.userDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: StreamingVoices.userDefaultsKey)
+            }
+        }
         let voice = try JSONDecoder().decode(Voice.self, from: splitJSON)
         XCTAssertEqual(voice.voiceSize, 15000000 + 16956298 + 4875)
+    }
+
+    func testSplitEntryVoiceSizeIsClassicTotalByDefault() throws {
+        // The new default OFF: a split entry with no stored
+        // preference sizes as the classic files total, not the
+        // split pair. This is the size CI actually saw (31956348).
+        let savedValue = UserDefaults.standard.object(forKey: StreamingVoices.userDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: StreamingVoices.userDefaultsKey)
+        defer {
+            if let savedValue {
+                UserDefaults.standard.set(savedValue, forKey: StreamingVoices.userDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: StreamingVoices.userDefaultsKey)
+            }
+        }
+        let voice = try JSONDecoder().decode(Voice.self, from: splitJSON)
+        XCTAssertEqual(voice.voiceSize, 31951473 + 4875)
     }
 
     func testClassicEntryVoiceSizeSumsFiles() throws {
