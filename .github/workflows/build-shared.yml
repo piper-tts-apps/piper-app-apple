@@ -122,6 +122,15 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+      - name: Store dSYMs
+        if: env.SIGN_BUILD == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Piper-${{ inputs.platform }}-${{ env.BUILD_NUMBER }}-dSYMs
+          path: ${{ env.BUILD_OUTPUT }}/*.xcarchive/dSYMs/**
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Upload To App Store Connect
         if: env.SIGN_BUILD == 'true'
         run: |
