@@ -27,12 +27,14 @@ struct SettingsView: View {
                         Text("model_format_compact").tag(ModelFormat.compact)
                     }
                     .pickerStyle(.menu)
+                } footer: {
+                    Text("model_format_description")
+                }
+
+                Section {
                     Toggle("streaming_voices", isOn: $streamingVoices)
                 } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("model_format_description")
-                        Text("streaming_voices_description")
-                    }
+                    Text("streaming_voices_description")
                 }
 
                 Section {
