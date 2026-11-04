@@ -13,60 +13,13 @@ import XCTest
 ///
 /// Fidelity boundary: PiperTests cannot link the PiperTTS extension
 /// target, so the AudioUnit's wiring of this gate is not under test
-/// here; the gate and the tight-loop host simulation below are. The
-/// simulation mirrors the AudioUnit's pull logic (wait, then drain) so
-/// a regression in the gate shows up as recorded silence.
+/// here; the gate and the tight-loop host simulation below are.
+/// The simulation mirrors the AudioUnit's pull logic (wait, then drain) so
+/// a regression in the gate shows up as recorded silence. A regression
+/// that only removes the wait call inside the AudioUnit, without
+/// touching the gate, would NOT be caught here; that wiring is covered
+/// only by a real-AU run (PiperWriteTest on device).
 final class RenderPullWaiterTests: XCTestCase {
-
-    /// Lock-guarded flag, so a background producer can flip it without
-    /// a captured-var data race under Swift 6.
-    private final class Flag {
-        private let lock = NSLock()
-        private var value: Bool
-        init(_ value: Bool) { self.value = value }
-        var current: Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            return value
-        }
-        func set(_ newValue: Bool) {
-            lock.lock()
-            defer { lock.unlock() }
-            value = newValue
-        }
-    }
-
-    /// Lock-guarded ring buffer, for the producer/consumer simulations.
-    private final class SampleBox {
-        private let lock = NSLock()
-        private var ring = FloatRingBuffer()
-        var count: Int {
-            lock.lock()
-            defer { lock.unlock() }
-            return ring.count
-        }
-        var isEmpty: Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            return ring.isEmpty
-        }
-        func append(_ samples: [Float]) {
-            lock.lock()
-            defer { lock.unlock() }
-            ring.append(contentsOf: samples)
-        }
-        func drain(
-            frameCount: Int, synthesisCompleted: Bool, isPriming: Bool,
-            primeThresholdFrames: Int, into destination: UnsafeMutablePointer<Float>
-        ) -> RenderDrainOutcome {
-            lock.lock()
-            defer { lock.unlock() }
-            return ring.drainForRender(
-                into: destination, frameCount: frameCount,
-                synthesisCompleted: synthesisCompleted, isPriming: isPriming,
-                primeThresholdFrames: primeThresholdFrames)
-        }
-    }
 
     func testWaitReturnsImmediatelyWhenAlreadyReady() {
         let waiter = RenderPullWaiter()
@@ -77,7 +30,7 @@ final class RenderPullWaiterTests: XCTestCase {
 
     func testWaitWakesOnSignalWhenReadyBecomesTrue() {
         let waiter = RenderPullWaiter()
-        let ready = Flag(false)
+        let ready = WaiterFlag(false)
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
             ready.set(true)
             waiter.signal()
@@ -102,7 +55,7 @@ final class RenderPullWaiterTests: XCTestCase {
         // Completion and cancel do not always carry a chunk, so they do
         // not always signal. The slice re-check must notice them anyway.
         let waiter = RenderPullWaiter()
-        let ready = Flag(false)
+        let ready = WaiterFlag(false)
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
             ready.set(true)
             // Deliberately no signal().
@@ -118,7 +71,7 @@ final class RenderPullWaiterTests: XCTestCase {
         // tight-loop host would record thousands of silence pulls in
         // that gap; with it, the first pull waits and drains real samples.
         let waiter = RenderPullWaiter()
-        let box = SampleBox()
+        let box = WaiterSampleBox()
         let frameCount = 1024
         let primeThreshold = 275
         var isPriming = true
@@ -134,13 +87,9 @@ final class RenderPullWaiterTests: XCTestCase {
             (isPriming && box.count >= primeThreshold) || (!isPriming && !box.isEmpty)
         }
         XCTAssertTrue(ready, "first chunk must arrive inside the timeout")
-        var destination = [Float](repeating: 9, count: frameCount)
-        let outcome = destination.withUnsafeMutableBufferPointer { buffer in
-            box.drain(
-                frameCount: frameCount, synthesisCompleted: false,
-                isPriming: isPriming, primeThresholdFrames: primeThreshold,
-                into: buffer.baseAddress!)
-        }
+        let (outcome, _) = drainWaiterPull(
+            box: box, frameCount: frameCount, completed: false,
+            isPriming: isPriming, primeThreshold: primeThreshold)
         isPriming = outcome.isPrimingPull
         if case let .rendered(copied, _, _, _, _) = outcome {
             XCTAssertGreaterThan(copied, 0, "the first pull must drain real samples, not silence")
@@ -155,7 +104,7 @@ final class RenderPullWaiterTests: XCTestCase {
         // holds until the threshold is reached, then the pull drains
         // from the very first sample.
         let waiter = RenderPullWaiter()
-        let box = SampleBox()
+        let box = WaiterSampleBox()
         box.append([Float](repeating: 0.5, count: 100))
         let primeThreshold = 275
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
@@ -164,14 +113,12 @@ final class RenderPullWaiterTests: XCTestCase {
         }
         let ready = waiter.waitUntilReady(timeoutSeconds: 2.0) { box.count >= primeThreshold }
         XCTAssertTrue(ready)
-        var destination = [Float](repeating: 0, count: 1024)
-        let outcome = destination.withUnsafeMutableBufferPointer { buffer in
-            box.drain(
-                frameCount: 1024, synthesisCompleted: false, isPriming: true,
-                primeThresholdFrames: primeThreshold, into: buffer.baseAddress!)
-        }
+        let (outcome, _) = drainWaiterPull(
+            box: box, frameCount: 1024, completed: false,
+            isPriming: true, primeThreshold: primeThreshold)
         XCTAssertEqual(
             outcome,
             .rendered(copied: 300, zeroFilled: 724, byteSize: 1024 * 4, remaining: 0, isFinal: false))
     }
+
 }

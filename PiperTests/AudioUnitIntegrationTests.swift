@@ -7,19 +7,60 @@ import Foundation
 
 /// Simulates PiperTTSAudioUnit rendering behavior without needing AVFoundation AudioUnit init.
 /// Guards against early complete on long paragraph and deallocate clearing.
+/// Since PR #104 the model is wait-then-drain: a starved pull waits
+/// before draining instead of rendering silence immediately, so a
+/// starved pull records nothing until the buffer can render.
 final class AudioUnitIntegrationTests: XCTestCase {
+
+    /// Lock-guarded ring buffer, for the wait-before-first-chunk test.
+    private final class WaitingSampleBox {
+        private let lock = NSLock()
+        private var ring = FloatRingBuffer()
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return ring.count
+        }
+        var isEmpty: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return ring.isEmpty
+        }
+        func append(_ samples: [Float]) {
+            lock.lock()
+            defer { lock.unlock() }
+            ring.append(contentsOf: samples)
+        }
+        func drain(
+            frameCount: Int, synthesisCompleted: Bool, isPriming: Bool,
+            primeThresholdFrames: Int, into destination: UnsafeMutablePointer<Float>
+        ) -> RenderDrainOutcome {
+            lock.lock()
+            defer { lock.unlock() }
+            return ring.drainForRender(
+                into: destination, frameCount: frameCount,
+                synthesisCompleted: synthesisCompleted, isPriming: isPriming,
+                primeThresholdFrames: primeThresholdFrames)
+        }
+    }
 
     // MARK: - Helpers mimicking PiperTTSAudioUnit logic
 
-    private func simulateRender(availableCount: Int, frameCount: Int, completed: Bool) -> (action: String, copied: Int) {
+    private func simulateRender(
+        availableCount: Int, frameCount: Int, completed: Bool
+    ) -> (action: String, copied: Int) {
         let intFrameCount = frameCount
         if availableCount == 0 && completed {
             return ("complete", 0)
         }
-        // Every other pull renders immediately at full size: real
-        // samples where available, silence for the shortfall.
-        // A starved pull renders 0 real samples - it must not complete
-        // early, and it must not block or retry.
+        if availableCount == 0 && !completed {
+            // Wait-then-drain (PR #104): a starved pull waits before
+            // draining and records nothing. It must not complete
+            // early, and it must not render silence immediately.
+            return ("waiting", 0)
+        }
+        // A pull with samples available renders immediately at full
+        // size: real samples where available, silence for the shortfall.
         let actualCopied = min(availableCount, intFrameCount)
         return ("render", actualCopied)
     }
@@ -50,15 +91,52 @@ final class AudioUnitIntegrationTests: XCTestCase {
         // ceil(2_646_000 / 1024) = 2584 renders (last partial 1008 samples)
         XCTAssertEqual(renders, 2584, "Expected ceil division renders for 120s buffer")
 
-        // After draining but not completed, renders silence - it must
-        // not complete early, and it must not block or retry either
+        // After draining but not completed, a pull waits instead of
+        // rendering silence: it must not complete early, and it must
+        // not record a silence pull either.
         let afterDrainNotCompleted = simulateRender(availableCount: 0, frameCount: frameCount, completed: false)
-        XCTAssertEqual(afterDrainNotCompleted.action, "render", "If piper not completed and buffer empty, should render silence, not complete early")
+        XCTAssertEqual(
+            afterDrainNotCompleted.action, "waiting",
+            "If piper not completed and buffer empty, should wait, not render silence")
         XCTAssertEqual(afterDrainNotCompleted.copied, 0)
 
         // Only when completed and empty -> complete
         let done = simulateRender(availableCount: 0, frameCount: frameCount, completed: true)
         XCTAssertEqual(done.action, "complete")
+    }
+
+    func testWaitBeforeFirstChunk() {
+        // Wait-then-drain at the integration level: the first pull
+        // waits for the priming threshold and drains real samples,
+        // recording no silence pull in the gap before the first chunk.
+        let waiter = RenderPullWaiter()
+        let box = WaitingSampleBox()
+        let frameCount = 1024
+        let primeThreshold = 275
+        var isPriming = true
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+            box.append([Float](repeating: 0.5, count: 4096))
+            waiter.signal()
+        }
+        let ready = waiter.waitUntilReady(timeoutSeconds: 2.0) {
+            (isPriming && box.count >= primeThreshold) || (!isPriming && !box.isEmpty)
+        }
+        XCTAssertTrue(ready, "first chunk must arrive inside the timeout")
+        var destination = [Float](repeating: 9, count: frameCount)
+        let outcome = destination.withUnsafeMutableBufferPointer { buffer in
+            box.drain(
+                frameCount: frameCount, synthesisCompleted: false,
+                isPriming: isPriming, primeThresholdFrames: primeThreshold,
+                into: buffer.baseAddress!)
+        }
+        isPriming = outcome.isPrimingPull
+        if case let .rendered(copied, _, _, _, _) = outcome {
+            XCTAssertEqual(copied, frameCount)
+            XCTAssertEqual(destination[0], 0.5, "first drained sample must be real audio, not silence")
+        } else {
+            XCTFail("the first pull must drain real samples, not record silence, got \(outcome)")
+        }
+        XCTAssertFalse(isPriming, "the threshold pull latches priming off and drains")
     }
 
     func testRenderDoesNotDropMiddleOnLongParagraph() {
