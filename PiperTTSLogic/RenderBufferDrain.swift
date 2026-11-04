@@ -39,6 +39,9 @@ public enum RenderPriming {
 /// ALWAYS produces a full-size render - `byteSize` is the full
 /// `frameCount * 4`, with any shortfall reported as `zeroFilled` silence
 /// frames - and it produces it immediately, without waiting for synthesis.
+/// The AudioUnit waits BEFORE calling this drain when starved (see
+/// RenderPullWaiter); the drain itself is the immediate step, so this
+/// contract is unchanged.
 /// A short buffer (byteSize below the requested frame count) invites the
 /// host to re-pull the same timestamp, which is what doubled the audio.
 public enum RenderDrainOutcome: Equatable {

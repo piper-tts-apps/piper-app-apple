@@ -29,6 +29,16 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
     private var isPriming = true
     private var primeThresholdFrames = 0
 
+    /// Wait gate for a starved pull (see RenderPullWaiter): the AU waits
+    /// here, BEFORE draining, instead of answering silence in a tight
+    /// offline loop. Signalled on every new chunk and on cancel/cleanup.
+    private let renderWaiter = RenderPullWaiter()
+    /// Bounded wait per pull, in seconds. Normal pulls exit on the first
+    /// chunk signal, well under this; the timeout only bounds a stalled
+    /// synthesis, after which the pull falls back to the usual full-size
+    /// silence render.
+    private let maxWaitSecondsPerPull: Double = 5.0
+
     private let requestGate = RequestGenerationGate()
     /// Generation of the request currently being synthesized. Guarded by outputDataLock.
     private var activeGeneration: UInt64 = 0
@@ -107,16 +117,28 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         }
 
         let intFrameCount = Int(frameCount)
-        let synthesisCompleted = piper.completed()
+        var synthesisCompleted = piper.completed()
 
         let bufferList = UnsafeMutableAudioBufferListPointer(outputAudioBufferList)
         let frames = bufferList[0].mData!.assumingMemoryBound(to: Float32.self)
 
-        // One lock hold for the whole drain: the pull is decided against
-        // the buffer count at this instant, and copy + removeFirst stay
-        // atomic. The pull never waits for synthesis: a starved pull
-        // renders full-size silence instead. The drain contract lives in
-        // PiperTTSLogic (RenderDrainOutcome).
+        // Wait BEFORE draining when the buffer cannot render yet: an
+        // offline host records every pull, so answering a starved pull
+        // with silence in a tight loop writes minutes of silence into
+        // the file. The wait is bounded, signalled by new samples, and
+        // re-checked in slices for completion/cancel. After the wait,
+        // one lock hold for the whole drain: the pull is decided
+        // against the buffer count at this instant, and copy +
+        // removeFirst stay atomic. The drain itself never waits, and
+        // byteSize stays full - this is not a return to the short
+        // buffer that doubled audio in 1.0.15. The drain contract
+        // lives in PiperTTSLogic (RenderDrainOutcome).
+        waitForRenderableBuffer()
+        if request == nil {
+            actionFlags.pointee = .offlineUnitRenderAction_Complete
+            return noErr
+        }
+        synthesisCompleted = piper.completed()
         os_unfair_lock_lock(&outputDataLock)
         let thresholdAtPull = primeThresholdFrames
         let outcome = outputData.drainForRender(into: frames, frameCount: intFrameCount, synthesisCompleted: synthesisCompleted, isPriming: isPriming, primeThresholdFrames: thresholdAtPull)
@@ -149,6 +171,23 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
                 actionFlags.pointee = .offlineUnitRenderAction_Render
             }
             return noErr
+        }
+    }
+
+    /// Blocks the render thread (offline, per the note on
+    /// internalRenderBlock) until the buffer can render: priming pulls
+    /// wait for the threshold, non-priming pulls wait for any sample,
+    /// and completed or cancelled requests wake immediately. Returns
+    /// on timeout with the buffer still starved; the caller then drains
+    /// as usual, which renders one full-size silence pull.
+    private func waitForRenderableBuffer() {
+        renderWaiter.waitUntilReady(timeoutSeconds: maxWaitSecondsPerPull) {
+            os_unfair_lock_lock(&outputDataLock)
+            let ready = request == nil || piper?.completed() == true
+                || (isPriming && outputData.count >= primeThresholdFrames)
+                || (!isPriming && !outputData.isEmpty)
+            os_unfair_lock_unlock(&outputDataLock)
+            return ready
         }
     }
 
@@ -202,6 +241,7 @@ public class PiperTTSAudioUnit: AVSpeechSynthesisProviderAudioUnit {
         primeThresholdFrames = 0
         os_unfair_lock_unlock(&outputDataLock)
         piper?.cancel()
+        renderWaiter.signal()
     }
 
     private func createPiperIfNeeded(voiceIdentifier: String) {
@@ -305,6 +345,7 @@ extension PiperTTSAudioUnit: PiperDelegate {
                 outputData.appendAndEnforceMax(contentsOf: resampled, maxCount: maxSamplesCount)
             }
             os_unfair_lock_unlock(&outputDataLock)
+            renderWaiter.signal()
         } else {
             os_unfair_lock_lock(&outputDataLock)
             let accepted = requestGate.shouldAcceptChunk(producedUnder: producingGeneration, forActiveRequest: activeGeneration)
@@ -312,6 +353,7 @@ extension PiperTTSAudioUnit: PiperDelegate {
                 outputData.appendAndEnforceMax(contentsOf: buf, maxCount: maxSamplesCount)
             }
             os_unfair_lock_unlock(&outputDataLock)
+            renderWaiter.signal()
         }
     }
 
