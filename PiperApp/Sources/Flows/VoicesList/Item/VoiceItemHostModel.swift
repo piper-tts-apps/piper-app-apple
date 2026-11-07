@@ -56,6 +56,7 @@ class VoiceItemHostModel: @unchecked Sendable, ObservableObject {
             guard let self = self else { return }
             self.viewModel.updateAvailable = keys.contains(self.viewModel.voice.key)
         }
+        refreshSystemVisibility()
     }
 
     deinit {
@@ -114,6 +115,17 @@ class VoiceItemHostModel: @unchecked Sendable, ObservableObject {
 
     func isInstalled(_ voice: Voice) -> Bool {
         return installed(voice) != nil
+    }
+
+    /// Re-probes the system registry for this row's installed model
+    /// (speaker 0): an installed voice the system does not list gets
+    /// the warning badge. Non-installed voices stay visible.
+    func refreshSystemVisibility() {
+        guard let modelInfo = installed(viewModel.voice)?.info else {
+            viewModel.isSystemVoiceVisible = true
+            return
+        }
+        viewModel.isSystemVoiceVisible = SystemVoiceVisibility.isVisible(modelInfo: modelInfo, speakerId: 0)
     }
 
     private func installed(_ voice: Voice) -> FileManager.ModelPaths? {

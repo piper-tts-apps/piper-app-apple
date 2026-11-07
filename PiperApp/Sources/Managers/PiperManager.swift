@@ -45,12 +45,8 @@ class PiperManager {
 #endif
         await setIsPlaying(true)
         if modelInfo.installedPath?.isInstalled == true {
-            let piperVoiceId = if modelInfo.numberOfSpeakers > 1 {
-                "\(modelInfo.voiceId)\(Constants.speakerIdSeparator)\(speakerId)"
-            } else {
-                modelInfo.voiceId
-            }
-            if let voice = AVSpeechSynthesisVoice(identifier: "dev.ihor-shevchuk.piperapp.pipertts.\(piperVoiceId)") {
+            let piperVoiceId = SystemVoiceVisibility.piperVoiceId(for: modelInfo, speakerId: speakerId)
+            if let voice = AVSpeechSynthesisVoice(identifier: SystemVoiceVisibility.systemIdentifier(for: modelInfo, speakerId: speakerId)) {
                 syntheser = SpeechSynthesizer()
                 await syntheser?.speak(demoText, voice: voice)
             } else {
@@ -76,11 +72,7 @@ class PiperManager {
                           to file: String,
                           speakerId: Int,
                           modelInfo: ModelInfo) async throws {
-        let piperVoiceId = if modelInfo.numberOfSpeakers > 1 {
-            "\(modelInfo.voiceId)\(Constants.speakerIdSeparator)\(speakerId)"
-        } else {
-            modelInfo.voiceId
-        }
+        let piperVoiceId = SystemVoiceVisibility.piperVoiceId(for: modelInfo, speakerId: speakerId)
         
         try await audioUnit.save(text: text, piperVoiceId: piperVoiceId, to: file)
     }

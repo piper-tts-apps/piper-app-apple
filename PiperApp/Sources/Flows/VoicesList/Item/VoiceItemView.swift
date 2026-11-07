@@ -179,7 +179,9 @@ struct VoiceItemView: View {
         let updateSuffix = showsUpdate ? ", \("update_available".localized)" : ""
         let isDownloading = hostModel.viewModel.isDownloading
         let downloadingSuffix = isDownloading ? ", \("downloading".localized)" : ""
-        let accessibilityLabel = baseAccessibilityLabel + licenseSuffix + updateSuffix + downloadingSuffix
+        let showsNotVisible = hostModel.isInstalled(voice) && !hostModel.viewModel.isSystemVoiceVisible
+        let visibilitySuffix = showsNotVisible ? ", \("not_available_to_voiceover".localized)" : ""
+        let accessibilityLabel = baseAccessibilityLabel + licenseSuffix + updateSuffix + downloadingSuffix + visibilitySuffix
         let accessibilityValue = isDownloading ? "\(Int(hostModel.viewModel.downloadProgress * 100))%" : ""
         // "Double tap for details" only fits an installed voice: its
         // row is a navigation link. A catalog row has no detail screen
@@ -212,6 +214,16 @@ struct VoiceItemView: View {
                         Spacer()
                     }
                 }
+                if showsNotVisible {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("not_available_to_voiceover")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                        Spacer()
+                    }
+                }
                 if let license = voice.license {
                     HStack {
                         Text("\("voice_license".localized): \(license)")
@@ -234,6 +246,9 @@ struct VoiceItemView: View {
         }
         .contextMenu {
             voiceActions()
+        }
+        .onAppear {
+            hostModel.refreshSystemVisibility()
         }
         .alert("uninstall_voice", isPresented: $unstallConfirmationShown) {
             Button("uninstall_button", role: .destructive) {

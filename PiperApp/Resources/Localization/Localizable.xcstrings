@@ -2382,6 +2382,17 @@
         }
       }
     },
+    "check_again" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check again"
+          }
+        }
+      }
+    },
     "connect" : {
       "comment" : "A button label that says \"Connect\".",
       "localizations" : {
@@ -6796,6 +6807,17 @@
         }
       }
     },
+    "not_available_to_voiceover" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not available to VoiceOver"
+          }
+        }
+      }
+    },
     "ok" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9769,6 +9791,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载进度 %@%"
+          }
+        }
+      }
+    },
+    "voice_not_visible_description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This voice is downloaded, but it is not in your device's voice list yet, so VoiceOver can't use it."
+          }
+        }
+      }
+    },
+    "voice_not_visible_restart_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If it still doesn't appear, restart your device. This usually happens after updating the app."
           }
         }
       }
