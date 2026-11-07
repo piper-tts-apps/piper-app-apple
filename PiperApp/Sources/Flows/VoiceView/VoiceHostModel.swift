@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import AVFoundation
 import PiperAppUtils
 
 class VoiceHostModel: @unchecked Sendable, ObservableObject {
@@ -10,6 +11,7 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
     private var playingCancellable: AnyCancellable?
     private var updatesCancellable: AnyCancellable?
     private var downloadsCancellable: AnyCancellable?
+    private var speakerCancellable: AnyCancellable?
     let piper: PiperManager
     /// The catalog entry for this installed voice, when the screen
     /// was reached from a catalog row: it enables the update flow.
@@ -30,6 +32,13 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
         self.voice = voice
         self.loader = loader
         updateSample()
+        refreshSystemVisibility()
+        // The visibility check is per speaker: re-probe when the
+        // picker changes the speaker (dropFirst: init already probed).
+        speakerCancellable = $viewModel.map(\.selectedSpeaker)
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in self?.refreshSystemVisibility() }
         playingCancellable = piper.$isPlaying.sink { [weak self] isPlaying in
             guard let self = self else {
                 return
@@ -104,6 +113,35 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
         let piper = self.piper
         Task {
             await piper.stopPlaying()
+        }
+    }
+
+    /// Re-probes the system registry for the selected speaker.
+    func refreshSystemVisibility() {
+        guard let modelInfo = viewModel.modelInfo else {
+            viewModel.isSystemVoiceVisible = true
+            return
+        }
+        viewModel.isSystemVoiceVisible = SystemVoiceVisibility.isVisible(modelInfo: modelInfo,
+                                                                          speakerId: viewModel.selectedSpeaker)
+    }
+
+    /// Asks the system to re-scan the provider voices and re-probes
+    /// after a short delay: the re-scan is asynchronous, so an
+    /// immediate re-probe would still see the stale registry.
+    func refreshSystemVoices() {
+        guard viewModel.modelInfo != nil else {
+            return
+        }
+        viewModel.isRefreshingSystemVoices = true
+        SystemVoiceVisibility.requestRescan()
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard let self else { return }
+            await MainActor.run {
+                self.viewModel.isRefreshingSystemVoices = false
+                self.refreshSystemVisibility()
+            }
         }
     }
 

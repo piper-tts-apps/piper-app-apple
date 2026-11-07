@@ -64,6 +64,28 @@ struct VoiceView: View {
         }
     }
 
+    @ViewBuilder
+    func systemVoiceVisibility() -> some View {
+        Section {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text("not_available_to_voiceover")
+                    .font(.headline)
+            }
+            Text("voice_not_visible_description")
+            if hostModel.viewModel.isRefreshingSystemVoices {
+                ProgressView()
+            } else {
+                Button("check_again") {
+                    hostModel.refreshSystemVoices()
+                }
+            }
+        } footer: {
+            Text("voice_not_visible_restart_hint")
+        }
+    }
+
     @State var unstallConfirmationShown: Bool = false
     @ViewBuilder
     func uninstall() -> some View {
@@ -116,6 +138,10 @@ struct VoiceView: View {
         List {
             if let modelInfo = hostModel.viewModel.modelInfo {
                 ModelInfoView(info: modelInfo, detailed: true)
+            }
+
+            if !hostModel.viewModel.isSystemVoiceVisible {
+                systemVoiceVisibility()
             }
 
             if hostModel.viewModel.updateAvailable {
