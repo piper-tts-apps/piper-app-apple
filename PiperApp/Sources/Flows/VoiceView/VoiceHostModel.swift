@@ -8,6 +8,11 @@ import PiperAppUtils
 
 class VoiceHostModel: @unchecked Sendable, ObservableObject {
     @Published var viewModel: VoiceViewModel
+    /// True while a system re-scan is in flight after "Check again".
+    /// Kept on the host model rather than inside the view-model
+    /// struct, so the view observes a plain @Published flag that
+    /// flips on every tap.
+    @Published var isRefreshingSystemVoices: Bool = false
     private var playingCancellable: AnyCancellable?
     private var updatesCancellable: AnyCancellable?
     private var downloadsCancellable: AnyCancellable?
@@ -129,19 +134,27 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
     /// Asks the system to re-scan the provider voices and re-probes
     /// after a short delay: the re-scan is asynchronous, so an
     /// immediate re-probe would still see the stale registry.
+    /// A tap while a re-scan is already in flight is ignored, and
+    /// the refreshing flag is reset in a defer so a cancelled or
+    /// failed wait can never leave the spinner stuck on.
     func refreshSystemVoices() {
         guard viewModel.modelInfo != nil else {
             return
         }
-        viewModel.isRefreshingSystemVoices = true
+        guard !isRefreshingSystemVoices else {
+            return
+        }
+        isRefreshingSystemVoices = true
         SystemVoiceVisibility.requestRescan()
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            guard let self else { return }
-            await MainActor.run {
-                self.viewModel.isRefreshingSystemVoices = false
-                self.refreshSystemVisibility()
+            defer {
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.isRefreshingSystemVoices = false
+                    self.refreshSystemVisibility()
+                }
             }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
     }
 
@@ -162,20 +175,25 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
     }
 
     func play() {
-        guard let modelInfo = viewModel.modelInfo else {
+        guard viewModel.modelInfo != nil else {
             return
         }
         let demoText = viewModel.demoText
         let piper = self.piper
         let isPlaying = self.viewModel.isPlaying
         let speakerId = self.viewModel.selectedSpeaker
+        let paths = viewModel.paths
         Task {
             if isPlaying {
                 await piper.stopPlaying()
             } else {
-                await piper.playSample(demoText: demoText,
-                                            speakerId: speakerId,
-                                            modelInfo: modelInfo)
+                // The detail-screen preview always renders the
+                // installed model locally: it must not depend on
+                // the system registry, so a voice the system has
+                // not (re-)registered still plays its sample.
+                await piper.playSampleLocally(demoText: demoText,
+                                              speakerId: speakerId,
+                                              paths: paths)
             }
         }
     }

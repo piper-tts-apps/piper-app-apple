@@ -9812,7 +9812,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "If it still doesn't appear, restart your device. This usually happens after updating the app."
+            "value" : "If it still doesn't appear, restart your device. It may happen after app upgrade."
           }
         }
       }

@@ -36,6 +36,24 @@ class PiperManager {
     }
 #endif
     
+    /// Which engine renders a sample: the system voice when the
+    /// registry lists it, otherwise local synthesis of the
+    /// installed model. `lookup` is injectable so tests can
+    /// answer without the system registry.
+    enum PlaybackRoute {
+        case systemVoice(AVSpeechSynthesisVoice)
+        case localSynthesis
+    }
+
+    func playbackRoute(for modelInfo: ModelInfo,
+                       speakerId: Int,
+                       lookup: (String) -> AVSpeechSynthesisVoice? = { AVSpeechSynthesisVoice(identifier: $0) }) -> PlaybackRoute {
+        if let voice = lookup(SystemVoiceVisibility.systemIdentifier(for: modelInfo, speakerId: speakerId)) {
+            return .systemVoice(voice)
+        }
+        return .localSynthesis
+    }
+
     func playSample(demoText: String,
                     speakerId: Int,
                     modelInfo: ModelInfo) async {
@@ -45,17 +63,44 @@ class PiperManager {
 #endif
         await setIsPlaying(true)
         if modelInfo.installedPath?.isInstalled == true {
-            let piperVoiceId = SystemVoiceVisibility.piperVoiceId(for: modelInfo, speakerId: speakerId)
-            if let voice = AVSpeechSynthesisVoice(identifier: SystemVoiceVisibility.systemIdentifier(for: modelInfo, speakerId: speakerId)) {
+            switch playbackRoute(for: modelInfo, speakerId: speakerId) {
+            case .systemVoice(let voice):
                 syntheser = SpeechSynthesizer()
                 await syntheser?.speak(demoText, voice: voice)
-            } else {
+            case .localSynthesis:
                 await audioUnit.play(text: demoText,
-                                     piperVoiceId: piperVoiceId)
+                                     piperVoiceId: SystemVoiceVisibility.piperVoiceId(for: modelInfo, speakerId: speakerId))
             }
         }
         
         await stopPlaying()
+    }
+
+    /// Plays a sample by rendering the installed model locally,
+    /// never consulting the system voice registry. The voice
+    /// detail screen uses this: its preview must work for an
+    /// installed voice even when the system has not
+    /// (re-)registered it for VoiceOver. The guard is the voice's
+    /// files on disk (not the installed-models list, which the
+    /// test host cannot see): playback needs the files, not the
+    /// registry. Returns true when local playback was attempted,
+    /// false when the voice's files are not on disk.
+    @discardableResult
+    func playSampleLocally(demoText: String,
+                           speakerId: Int,
+                           paths: FileManager.ModelPaths) async -> Bool {
+        guard let modelInfo = paths.info, paths.exist else {
+            return false
+        }
+#if os(iOS)
+        activatePlaybackMode()
+        setAudioSession(active: true)
+#endif
+        await setIsPlaying(true)
+        await audioUnit.play(text: demoText,
+                             piperVoiceId: SystemVoiceVisibility.piperVoiceId(for: modelInfo, speakerId: speakerId))
+        await stopPlaying()
+        return true
     }
     
     func stopPlaying() async {

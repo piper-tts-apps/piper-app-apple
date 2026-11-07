@@ -74,11 +74,17 @@ struct VoiceView: View {
                     .font(.headline)
             }
             Text("voice_not_visible_description")
-            if hostModel.viewModel.isRefreshingSystemVoices {
-                ProgressView()
-            } else {
+            // The button stays mounted across taps and the spinner
+            // appears beside it while refreshing: swapping the
+            // button for a spinner on every tap showed the spinner
+            // only the first time.
+            HStack {
                 Button("check_again") {
                     hostModel.refreshSystemVoices()
+                }
+                .disabled(hostModel.isRefreshingSystemVoices)
+                if hostModel.isRefreshingSystemVoices {
+                    ProgressView()
                 }
             }
         } footer: {
