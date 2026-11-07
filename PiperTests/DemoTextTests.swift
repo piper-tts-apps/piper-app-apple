@@ -80,13 +80,14 @@ final class DemoTextTests: XCTestCase {
         try XCTSkipUnless(dataAsset != nil, "Samples asset not available in this test host")
         let samples = try JSONDecoder().decode([String: String].self, from: XCTUnwrap(dataAsset?.data))
         for code in ["bn_BD", "et_EE", "eu_ES", "he_IL", "hy_AM", "id_ID",
-                     "ko_KR", "ku_TR", "ml_IN", "mr_IN", "sq_AL", "th_TH"] {
+                     "ko_KR", "ku_TR", "ml_IN", "mr_IN", "sq_AL", "th_TH", "tl_PH"] {
             let parts = code.split(separator: "_")
             let lang = language(code: code, family: String(parts[0]), region: String(parts[1]))
             XCTAssertEqual(DemoText.sampleText(in: samples, for: lang), samples[code])
         }
         XCTAssertNotEqual(samples["ml_IN"], samples["id_ID"])
         XCTAssertTrue(samples["ml_IN"]?.contains("മഴവില്ല്") ?? false)
+        XCTAssertTrue(samples["tl_PH"]?.contains("bahaghari") ?? false)
     }
 
     /// The bundled `Samples` asset itself: every Spanish voice in the
