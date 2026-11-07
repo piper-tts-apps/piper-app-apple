@@ -3,13 +3,20 @@
 
 import Foundation
 import Combine
+import AVFoundation
 import PiperAppUtils
 
 class VoiceHostModel: @unchecked Sendable, ObservableObject {
     @Published var viewModel: VoiceViewModel
+    /// True while a system re-scan is in flight after "Check again".
+    /// Kept on the host model rather than inside the view-model
+    /// struct, so the view observes a plain @Published flag that
+    /// flips on every tap.
+    @Published var isRefreshingSystemVoices: Bool = false
     private var playingCancellable: AnyCancellable?
     private var updatesCancellable: AnyCancellable?
     private var downloadsCancellable: AnyCancellable?
+    private var speakerCancellable: AnyCancellable?
     let piper: PiperManager
     /// The catalog entry for this installed voice, when the screen
     /// was reached from a catalog row: it enables the update flow.
@@ -30,6 +37,13 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
         self.voice = voice
         self.loader = loader
         updateSample()
+        refreshSystemVisibility()
+        // The visibility check is per speaker: re-probe when the
+        // picker changes the speaker (dropFirst: init already probed).
+        speakerCancellable = $viewModel.map(\.selectedSpeaker)
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in self?.refreshSystemVisibility() }
         playingCancellable = piper.$isPlaying.sink { [weak self] isPlaying in
             guard let self = self else {
                 return
@@ -107,6 +121,43 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
         }
     }
 
+    /// Re-probes the system registry for the selected speaker.
+    func refreshSystemVisibility() {
+        guard let modelInfo = viewModel.modelInfo else {
+            viewModel.isSystemVoiceVisible = true
+            return
+        }
+        viewModel.isSystemVoiceVisible = SystemVoiceVisibility.isVisible(modelInfo: modelInfo,
+                                                                          speakerId: viewModel.selectedSpeaker)
+    }
+
+    /// Asks the system to re-scan the provider voices and re-probes
+    /// after a short delay: the re-scan is asynchronous, so an
+    /// immediate re-probe would still see the stale registry.
+    /// A tap while a re-scan is already in flight is ignored, and
+    /// the refreshing flag is reset in a defer so a cancelled or
+    /// failed wait can never leave the spinner stuck on.
+    func refreshSystemVoices() {
+        guard viewModel.modelInfo != nil else {
+            return
+        }
+        guard !isRefreshingSystemVoices else {
+            return
+        }
+        isRefreshingSystemVoices = true
+        SystemVoiceVisibility.requestRescan()
+        Task { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.isRefreshingSystemVoices = false
+                    self.refreshSystemVisibility()
+                }
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+    }
+
     func updateSample() {
         guard let language = viewModel.paths.info?.language,
               let sample = DemoText.text(for: language) else {
@@ -124,20 +175,25 @@ class VoiceHostModel: @unchecked Sendable, ObservableObject {
     }
 
     func play() {
-        guard let modelInfo = viewModel.modelInfo else {
+        guard viewModel.modelInfo != nil else {
             return
         }
         let demoText = viewModel.demoText
         let piper = self.piper
         let isPlaying = self.viewModel.isPlaying
         let speakerId = self.viewModel.selectedSpeaker
+        let paths = viewModel.paths
         Task {
             if isPlaying {
                 await piper.stopPlaying()
             } else {
-                await piper.playSample(demoText: demoText,
-                                            speakerId: speakerId,
-                                            modelInfo: modelInfo)
+                // The detail-screen preview always renders the
+                // installed model locally: it must not depend on
+                // the system registry, so a voice the system has
+                // not (re-)registered still plays its sample.
+                await piper.playSampleLocally(demoText: demoText,
+                                              speakerId: speakerId,
+                                              paths: paths)
             }
         }
     }

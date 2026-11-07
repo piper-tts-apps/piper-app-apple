@@ -64,6 +64,34 @@ struct VoiceView: View {
         }
     }
 
+    @ViewBuilder
+    func systemVoiceVisibility() -> some View {
+        Section {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text("not_available_to_voiceover")
+                    .font(.headline)
+            }
+            Text("voice_not_visible_description")
+            // The button stays mounted across taps and the spinner
+            // appears beside it while refreshing: swapping the
+            // button for a spinner on every tap showed the spinner
+            // only the first time.
+            HStack {
+                Button("check_again") {
+                    hostModel.refreshSystemVoices()
+                }
+                .disabled(hostModel.isRefreshingSystemVoices)
+                if hostModel.isRefreshingSystemVoices {
+                    ProgressView()
+                }
+            }
+        } footer: {
+            Text("voice_not_visible_restart_hint")
+        }
+    }
+
     @State var unstallConfirmationShown: Bool = false
     @ViewBuilder
     func uninstall() -> some View {
@@ -116,6 +144,10 @@ struct VoiceView: View {
         List {
             if let modelInfo = hostModel.viewModel.modelInfo {
                 ModelInfoView(info: modelInfo, detailed: true)
+            }
+
+            if !hostModel.viewModel.isSystemVoiceVisible {
+                systemVoiceVisibility()
             }
 
             if hostModel.viewModel.updateAvailable {
